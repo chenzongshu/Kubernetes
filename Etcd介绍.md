@@ -15,5 +15,6 @@ Etcd主要使用了raft协议来保持一致性, 这里raft协议不做介绍, �
 
 wal日志是二进制的，解析出来后是一个数据结构`LogEntry`。结构如下
 
+|||||
 |type|term|index|data|
 

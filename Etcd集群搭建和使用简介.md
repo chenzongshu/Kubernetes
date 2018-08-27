@@ -100,7 +100,34 @@ PrevNode.Value: hello bruce
 
 更多的操作命令省略，可以见`help`
 
+## 查看API的版本
+
+```
+[root@SZD-L0072834 ~]# etcdctl -version
+etcdctl version: 3.1.10
+API version: 2
+```
+## 切换API版本
+
+```
+export ETCDCTL_API=3
+```
+
 ## 集群管理命令
+
+
+## 查看API的版本
+
+```
+[root@SZD-L0072834 ~]# etcdctl -version
+etcdctl version: 3.1.10
+API version: 2
+```
+## 切换API版本
+
+```
+export ETCDCTL_API=3
+```
 
 ### 查看集群健康状态
 

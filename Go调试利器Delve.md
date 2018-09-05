@@ -21,7 +21,7 @@ go get github.com/derekparker/delve/cmd/dlv
 设置`GOPATH`, 把`delve`项目代码clone下了,然后编译
 
 ```
-$ git clone https://github.com/derekparker/delve.git $GOPATH/src/github.com/derekparker/delve
+$ git clone https://github.com/derekparker/delve.git //再拷贝到目标环境的GOPATH下面
 $ cd $GOPATH/src/github.com/derekparker/delve
 $ make install
 ```

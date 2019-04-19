@@ -1,3 +1,8 @@
+﻿# kubernetes集群安全机制分析
+
+标签（空格分隔）： kubernetes
+
+---
 
 # 前言
 
@@ -53,6 +58,11 @@ kubernetes证书存放目录：`/etc/kubernetes/ssl`
 - kubectl：使用 ca.pem、admin-key.pem、admin.pem；
 - kube-controller、kube-scheduler 当前需要和 kube-apiserver 部署在同一台机器上且使用非安全端口通信，故不需要证书。
 
+### token.csv
+
+该文件为一个用户的描述文件，基本格式为 `Token,用户名,UID,用户组`；
+
+这个文件在 apiserver 启动时被 apiserver 加载，然后就相当于在集群内创建了一个这个用户；接下来就可以用 RBAC 给他授权
 
 ### 准备工作
 
@@ -304,6 +314,68 @@ cfssl-certinfo -cert kubernetes.pem
 
 把证书scp到各个节点的 `/etc/kubernetes/ssl`
 
+### 组件配置证书
+
+#### kubectl
+
+- `--certificate-authority=/etc/kubernetes/ssl/ca.pem` 设置了该集群的根证书路径， `--embed-certs为true`表示将`--certificate-authority`证书写入到kubeconfig中
+- `--client-certificate=/etc/kubernetes/ssl/admin.pem` 指定kubectl证书
+- `--client-key=/etc/kubernetes/ssl/admin-key.pem` 指定kubectl私钥
+
+#### kubelet
+
+当成功签发证书后，目标节点的 kubelet 会将证书写入到 --cert-dir= 选项指定的目录中；此时如果不做其他设置应当生成上述除ca.pem以外的4个文件
+
+- `kubelet-client.crt` 该文件在 kubelet 完成 TLS bootstrapping 后生成，此证书是由 controller manager 签署的，此后 kubelet 将会加载该证书，用于与 apiserver 建立 TLS 通讯，同时使用该证书的 CN 字段作为用户名，O 字段作为用户组向 apiserver 发起其他请求
+- `kubelet.crt` 该文件在 kubelet 完成 TLS bootstrapping 后并且没有配置 `--feature-gates=RotateKubeletServerCertificate=true` 时才会生成；这种情况下该文件为一个独立于 apiserver CA 的自签 CA 证书，有效期为 1 年；被用作 kubelet 10250 api 端口
+
+#### kube-apiserver
+
+- `--token-auth-file=/etc/kubernetes/token.csv` 指定了token.csv的位置，用于kubelet 组件 第一次启动时没有证书如何连接 apiserver 。 Token 和 apiserver 的 CA 证书被写入了 kubelet 所使用的 bootstrap.kubeconfig 配置文件中；这样在首次请求时，kubelet 使用 bootstrap.kubeconfig 中的 apiserver CA 证书来与 apiserver 建立 TLS 通讯，使用 bootstrap.kubeconfig 中的用户 Token 来向 apiserver 声明自己的 RBAC 授权身份
+- `--tls-cert-file=/etc/kubernetes/ssl/kubernetes.pem` 指定kube-apiserver证书地址
+- `--tls-private-key-file=/etc/kubernetes/ssl/kubernetes-key.pem` 指定kube-apiserver私钥地址
+- `--client-ca-file=/etc/kubernetes/ssl/ca.pem` 指定根证书地址
+- `--service-account-key-file=/etc/kubernetes/ssl/ca-key.pem` 包含PEM-encoded x509 RSA公钥和私钥的文件路径，用于验证Service Account的token，如果不指定，则使用--tls-private-key-file指定的文件
+- `--etcd-cafile=/etc/kubernetes/ssl/ca.pem` 到etcd安全连接使用的SSL CA文件
+- `--etcd-certfile=/etc/kubernetes/ssl/kubernetes.pem` 到etcd安全连接使用的SSL 证书文件
+- `--etcd-keyfile=/etc/kubernetes/ssl/kubernetes-key.pem` 到etcd安全连接使用的SSL 私钥文件
+
+#### kube-controller-manager
+
+kubelet 发起的 CSR 请求都是由 kube-controller-manager 来做实际签署的,所有使用的证书都是根证书的密钥对 。由于kube-controller-manager是和kube-apiserver部署在同一节点上，且使用非安全端口通信，故不需要证书
+
+- `--cluster-signing-cert-file=/etc/kubernetes/ssl/ca.pem` 指定签名的CA机构根证书，用来签名为 TLS BootStrap 创建的证书和私钥
+- `--cluster-signing-key-file=/etc/kubernetes/ssl/ca-key.pem` 指定签名的CA机构私钥，用来签名为 TLS BootStrap 创建的证书和私钥
+- `--service-account-private-key-file=/etc/kubernetes/ssl/ca-key.pem` 同上
+- `--root-ca-file=/etc/kubernetes/ssl/ca.pem` 根CA证书文件路径 ，用来对 kube-apiserver 证书进行校验，指定该参数后，才会在Pod 容器的 ServiceAccount 中放置该 CA 证书文件
+- `--kubeconfig kubeconfig`配置文件路径，在配置文件中包括Master的地址信息及必要认证信息
+
+#### kube-scheduler && kube-proxy
+
+kube-scheduler是和kube-apiserver一般部署在同一节点上，且使用非安全端口通信，故启动参参数中没有指定证书的参数可选 。 若分离部署，可在kubeconfig文件中指定证书，使用kubeconfig认证，kube-proxy类似
+
+```
+$ # 设置集群参数
+$ kubectl config set-cluster kubernetes \
+  --certificate-authority=/etc/kubernetes/ssl/ca.pem \
+  --embed-certs=true \
+  --server=${KUBE_APISERVER} \
+  --kubeconfig=kube-proxy.kubeconfig
+$ # 设置客户端认证参数
+$ kubectl config set-credentials kube-proxy \
+  --client-certificate=/etc/kubernetes/ssl/kube-proxy.pem \
+  --client-key=/etc/kubernetes/ssl/kube-proxy-key.pem \
+  --embed-certs=true \
+  --kubeconfig=kube-proxy.kubeconfig
+$ # 设置上下文参数
+$ kubectl config set-context default \
+  --cluster=kubernetes \
+  --user=kube-proxy \
+  --kubeconfig=kube-proxy.kubeconfig
+$ # 设置默认上下文
+$ kubectl config use-context default --kubeconfig=kube-proxy.kubeconfig
+$ mv kube-proxy.kubeconfig /etc/kubernetes/
+```
 
 ## token认证
 
@@ -540,3 +612,32 @@ API Server会创建一组默认的`ClusterRole`和`ClusterRoleBinding`对象。�
 - LimitRanger：用于资源限制管理，作用于namespace上，确保对Pod进行资源限制。启用该插件还会为未设置资源限制的Pod进行默认设置，例如为namespace "default"中所有的Pod设置0.1CPU的资源请求。
 - NamespaceLifecycle：如果尝试在一个不存在的namespace中创建资源对象，则该创建请求将被拒绝。当删除一个namespace时，系统将会删除该namespace中所有对象，保存Pod，Service等。
 - DefaultStorageClass：为了实现共享存储的动态供应，为未指定StorageClass或PV的PVC尝试匹配默认的StorageClass，尽可能减少用户在申请PVC时所需了解的后端存储细节。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

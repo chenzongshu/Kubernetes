@@ -219,7 +219,6 @@ kube-system   kube-scheduler-czs-virtual-machine            1/1     Running   12
 
 ```
 root@czs-virtual-machine:~# kubectl taint nodes --all node-role.kubernetes.io/master-
-node/czs-virtual-machine untainted
 ```
 
 ## 加入工作节点
@@ -318,3 +317,66 @@ sudo kubeadm reset
 ```
 
 如果你想重新配置集群，使用新的参数重新运行`kubeadm init`或者`kubeadm join`即可
+
+# CentOS配置差异
+
+上面使用的是ubuntu, 如果使用CentOS, 有一些差异化的配置
+
+配置转发参数
+
+```
+cat <<EOF >  /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+sysctl --system
+```
+
+设置国内kubernetes阿里云yum源
+
+```
+cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://mirrors.aliyun.com/kubernetes/yum/repos/kubernetes-el7-x86_64/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors.aliyun.com/kubernetes/yum/doc/rpm-package-key.gpg
+EOF
+```
+
+设置docker源
+```
+wget https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo -P /etc/yum.repos.d/
+```
+
+加载ipvs内核，使node节点kube-proxy支持ipvs代理规则。
+```
+modprobe ip_vs_rr
+modprobe ip_vs_wrr
+modprobe ip_vs_sh
+```
+
+并添加到开机启动文件/etc/rc.local里面。
+```
+cat <<EOF >> /etc/rc.local
+modprobe ip_vs_rr
+modprobe ip_vs_wrr
+modprobe ip_vs_sh
+EOF
+```
+
+在`kubeadm init`之后
+
+服务启动后需要根据输出提示，进行配置：
+
+```
+mkdir -p $HOME/.kube
+cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+```
+
+然后即可以安装网络插件来拉起
+
+
+

@@ -25,7 +25,7 @@ Kubernetes API 其实可以粗略地分成两类，我们称之为不同的 scop
 
 Root scope API 可以对普通用户直接屏蔽
 
-## 节点隔离
+## 节点隔离
 
 如果是容器化部署, 可以给master 打上 Taint。Taint 就是节点上的一种特殊标记，可以用来排斥所有的 Pod， 只有拥有特定 toleration 的 Pod 才能被调度上来.
 

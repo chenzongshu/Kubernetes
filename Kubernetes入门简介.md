@@ -18,7 +18,7 @@ k8s集群中，存在两种性质的物理节点，一种是master，一种是no
 
 -  **APIServer**：APIServer负责对外提供RESTful的Kubernetes API服务，它是系统管理指令的统一入口，任何对资源进行增删改查的操作都要交给APIServer处理后再提交给etcd。如架构图中所示，kubectl（Kubernetes提供的客户端工具，该工具内部就是对Kubernetes API的调用）是直接和APIServer交互的。
 
-- **schedule**：scheduler的职责很明确，就是负责调度pod到合适的Node上。如果把scheduler看成一个黑匣子，那么它的输入是pod和由多个Node组成的列表，输出是Pod和一个Node的绑定，即将这个pod部署到这个Node上。Kubernetes目前提供了调度算法，但是同样也保留了接口，用户可以根据自己的需求定义自己的调度算法。
+- **scheduler**：scheduler的职责很明确，就是负责调度pod到合适的Node上。如果把scheduler看成一个黑匣子，那么它的输入是pod和由多个Node组成的列表，输出是Pod和一个Node的绑定，即将这个pod部署到这个Node上。Kubernetes目前提供了调度算法，但是同样也保留了接口，用户可以根据自己的需求定义自己的调度算法。
 
 - **controller manager**：如果说APIServer做的是“前台”的工作的话，那controller manager就是负责“后台”的。每个资源一般都对应有一个控制器，而controller manager就是负责管理这些控制器的。比如我们通过APIServer创建一个pod，当这个pod创建成功后，APIServer的任务就算完成了。而后面保证Pod的状态始终和我们预期的一样的重任就由controller manager去保证了。
 
@@ -177,58 +177,84 @@ Service同RC一样，都是通过Label来关联Pod的。当你在Service的yaml�
 
 需要注意的是，Kubernetes分配给Service的固定IP是一个虚拟IP，并不是一个真实的IP，在外部是无法寻址的。真实的系统实现上，Kubernetes是通过Kube-proxy组件来实现的虚拟IP路由及转发。所以在之前集群部署的环节上，我们在每个Node上均部署了Proxy这个组件，从而实现了Kubernetes层级的虚拟转发网络。
 
-## Service代理外部服务
+## 外部服务service
 
-Service不仅可以代理Pod，还可以代理任意其他后端，比如运行在Kubernetes外部Mysql、Oracle等。这是通过定义两个同名的service和endPoints来实现的。示例如下：
+应用需要用到外部服务, 比如外部数据库, 外部短信系统等的时候, 可以使用外部服务service
 
-redis-service.yaml
+使用方式也比较简单, 创建一个**不带选择器**的service, 再创建一个**同名**的endpoint, 即可
 
 ```
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis-service
+  name: mysql-test
 spec:
   ports:
-  - port: 6379
-    targetPort: 6379
+  - port: 80
+    targetPort: 81
     protocol: TCP
 ```
 
-redis-endpoints.yaml
+将外部服务器的172.17.241.47、59.107.26.221的80端口映射到内部服务
 
 ```
 apiVersion: v1
 kind: Endpoints
 metadata:
-  name: redis-service
+  name: mysql-test
 subsets:
   - addresses:
-    - ip: 10.0.251.145
+    - ip: 172.17.241.47
+    - ip: 59.107.26.221
     ports:
-    - port: 6379
+    - port: 80
       protocol: TCP
 ```
 
-基于文件创建完Service和Endpoints之后，在Kubernetes的Service中即可查询到自定义的Endpoints。
+如果外部服务是个URI, 还可以用ExternalName, 这里不详细讲解
 
 ```
-[root@k8s-master demon]# kubectl describe service redis-service
-Name:            redis-service
-Namespace:        default
-Labels:            <none>
-Selector:        <none>
-Type:            ClusterIP
-IP:            10.254.52.88
-Port:            <unset>    6379/TCP
-Endpoints:        10.0.251.145:6379
-Session Affinity:    None
-No events.
-[root@k8s-master demon]# etcdctl get /skydns/sky/default/redis-service
-{"host":"10.254.52.88","priority":10,"weight":10,"ttl":30,"targetstrip":0}
+kind: Service
+apiVersion: v1
+metadata:
+  name: mongo
+  spec:
+  type: ExternalName
+  externalName: ds149763.mlab.com
 ```
 
-## Service内部负载均衡
+## headless service
 
-当Service的Endpoints包含多个IP的时候，及服务代理存在多个后端，将进行请求的负载均衡。默认的负载均衡策略是轮训或者随机（有kube-proxy的模式决定）。同时，Service上通过设置Service-->spec-->sessionAffinity=ClientIP，来实现基于源IP地址的会话保持。
+- 希望自己控制负载均衡策略
+- 应用程序系统知道属于同组服务的其他实例, 然后自己决定如何处理这个Pod列表
+
+使用方式为不为service设置ClusterIP
+
+```
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  selector:
+    app: nginx-demo
+  ports:
+  - port: 80
+    name: nginx
+  clusterIP: None
+```
+
+# liveness和readness
+
+两种健康检测方式到底有什么区别? 简明扼要的归纳
+
+- liveness检测容器的存活性, readness检测容器里面的应用是否处于就绪状态;
+- liveness检测失败会根据重启策略来决定是否重启Pod, readness检测失败会把pod 改为 not ready, 这个时候不会导流量到该pod;
+- 两者功能不同, 如果只配置了liveness, 容器启动成功但是应用还没成功的时候, 会导流量到该pod, 会产生一些错误;
+
+# RBAC
+
+## role
+
+- role只能对命名空间内的资源进行授权
 

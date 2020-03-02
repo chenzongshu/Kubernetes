@@ -131,6 +131,9 @@ metadata:
 
 # Controller
 
+controller都是由controller-manager进行管理。
+每个Controller通过API Server提供的接口实时监控整个集群的每个资源对象的当前状态，当发生各种故障导致系统状态发生变化时，会尝试通过CRUD操作将系统状态修复到“期望状态”。
+
 如何去实现一个Controller呢？
 
 可以使用Go来实现，并且不论是参考资料还是开源支持都非常好，推荐有Go语言基础的优先考虑用client-go来作为Kubernetes的客户端，用KubeBuilder(https://github.com/kubernetes-sigs/kubebuilder)来生成骨架代码。一个官方的Controller示例项目是sample-controller。
@@ -142,6 +145,19 @@ Fabric8的资料目前只有https://github.com/fabric8io/kubernetes-client，注
 这些客户端本质上都是通过REST接口来与Kubernetes API Server通信的。
 
 Controller的逻辑其实是很简单的：监听CRD实例（以及关联的资源）的CRUD事件，然后执行相应的业务逻辑
+
+Controller主要使用到 Informer和workqueue两个核心组件。
+
+Controller可以有一个或多个informer来跟踪某一个resource。
+Informter跟API server保持通讯获取资源的最新状态并更新到本地的cache中，一旦跟踪的资源有变化，informer就会调用callback。把关心的变更的Object放到workqueue里面。
+然后woker执行真正的业务逻辑，计算和比较workerqueue里items的当前状态和期望状态的差别，然后通过client-go向API server发送请求，直到驱动这个集群向用户要求的状态演化。
+
+下面以sample-controller(https://github.com/kubernetes/sample-controller) 为例，来讲解开发自定义Controller的关键步骤和注意点。
+
+1. 根据CRD的模板定义出自己的资源管理对象。比如crd.yaml文件
+
+
+
 
 
 

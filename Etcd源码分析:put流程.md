@@ -4,7 +4,7 @@ put操作是etcd v3 client支持的命令，和v2的set用法差不多
 
 但是需要注意的是，如果你在一个3节点的etcd集群中，A节点切换为v3 client版本，然后put进了一对key-value，在B节点，还是v2的client，这个时候你get不到数据的，如果在B节点切换到了v3 client，这个时候才可以get到数据
 
-简单的说，**v2和v3 client，插入数据到同一个etcd集群中，数据不能互通**
+简单的说，**v2和v3 client，插入数据到同一个etcd集群中，数据不能互通** 
 
 # put流程分析
 

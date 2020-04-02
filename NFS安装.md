@@ -34,11 +34,11 @@ mkdir -p /data/nfs/gitlab
 
 参数说明：
 
-|:-|:-|
 |参数|	作用|
-|ro|read-only|
-|rw|read-write|
-|root_squash|nfs客户端以root管理员身份访问nfs服务端时，映射为nfs服务端所在主机的匿名用户（权限会受限）|
+|:--- |:---|
+|ro| read-only|
+|rw| read-write|
+|root_squash| nfs客户端以root管理员身份访问nfs服务端时，映射为nfs服务端所在主机的匿名用户（权限会受限）|
 |no_root_squash|nfs客户端以root管理员身份访问nfs服务端时，映射为nfs服务端所在主机的root用户（权限不会受限）
 |sync|数据同时写入内存和磁盘。相当于同步双写，因为同时要写内存和磁盘，所以性能会受损，但是数据一致性得以保证，不会丢失|
 |async|数据会优先写入内存，然后再写入磁盘。因为写入到内存的数据并不会立刻把数据同步到硬盘中，这时如果断电就会导致部分数据丢失，但是性能却会比sync更有效|

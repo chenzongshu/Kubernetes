@@ -244,27 +244,23 @@ EOF
 部署完成后，查看各组件状态：
 
 ```bash
-kubectl -n istio-system get pod
-NAME                                    READY   STATUS    RESTARTS   AGE
-grafana-5cc7f86765-rt549                1/1     Running   0          3h11m
-istio-egressgateway-57999c5b76-59z8v    1/1     Running   0          3h11m
-istio-ingressgateway-5b97647565-zjz4k   1/1     Running   0          71m
-istio-tracing-8584b4d7f9-2jbjp          1/1     Running   0          3h11m
-istiod-86798869b8-jmk9v                 1/1     Running   0          3h11m
-kiali-76f556db6d-qnsfj                  1/1     Running   0          3h11m
-prometheus-6fd77b7876-c4vzn             2/2     Running   0          3h11m
+[root@centos-kata istio-1.5.2]# kubectl -n istio-system get pod
+NAME                                   READY   STATUS    RESTARTS   AGE
+grafana-5cc7f86765-j9xng               1/1     Running   0          15h
+istio-egressgateway-65d4884678-ptdtb   1/1     Running   0          15h
+istio-tracing-8584b4d7f9-b5n4b         1/1     Running   0          15h
+istiod-55dc75dfb5-bpbwq                1/1     Running   0          15h
+kiali-696bb665-8g2bz                   1/1     Running   0          19m
+prometheus-77b9c64b9c-swhkf            2/2     Running   0          15h
 ```
 
 
 
 ```bash
-kubectl -n kube-system get pod -l k8s-app=istio-cni-node
-
-NAME                   READY   STATUS    RESTARTS   AGE
-istio-cni-node-4dlfb   2/2     Running   0          3h12m
-istio-cni-node-4s9s7   2/2     Running   0          3h12m
-istio-cni-node-8g22x   2/2     Running   0          3h12m
-istio-cni-node-x2drr   2/2     Running   0          3h12m
+[root@centos-kata istio-1.5.2]# kubectl -n kube-system get pod -l k8s-app=istio-cni-node -o wide
+NAME                   READY   STATUS    RESTARTS   AGE   IP               NODE          NOMINATED NODE   READINESS GATES
+istio-cni-node-8thqh   2/2     Running   1          71s   172.16.104.131   vm1           <none>           <none>
+istio-cni-node-ttnv7   2/2     Running   0          16h   172.16.104.171   centos-kata   <none>           <none>
 ```
 
 
@@ -297,3 +293,109 @@ cat /etc/cni/net.d/10-calico.conflist
   ]
 }
 ```
+
+查看刚拉起的service
+
+```
+[root@centos-kata ~]# kubectl get svc -n istio-system
+NAME                        TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                                                    AGE
+grafana                     ClusterIP   10.96.43.108    <none>        3000/TCP                                                   20h
+istio-egressgateway         ClusterIP   10.96.27.71     <none>        80/TCP,443/TCP,15443/TCP                                   20h
+istio-ingressgateway        ClusterIP   10.96.21.20     <none>        15020/TCP,80/TCP,443/TCP                                   20h
+istio-pilot                 ClusterIP   10.96.148.126   <none>        15010/TCP,15011/TCP,15012/TCP,8080/TCP,15014/TCP,443/TCP   20h
+istiod                      ClusterIP   10.96.0.37      <none>        15012/TCP,443/TCP                                          20h
+jaeger-agent                ClusterIP   None            <none>        5775/UDP,6831/UDP,6832/UDP                                 20h
+jaeger-collector            ClusterIP   10.96.99.190    <none>        14267/TCP,14268/TCP,14250/TCP                              20h
+jaeger-collector-headless   ClusterIP   None            <none>        14250/TCP                                                  20h
+jaeger-query                ClusterIP   10.96.31.5      <none>        16686/TCP                                                  20h
+kiali                       ClusterIP   10.96.96.177    <none>        20001/TCP                                                  20h
+prometheus                  ClusterIP   10.96.131.15    <none>        9090/TCP                                                   20h
+tracing                     ClusterIP   10.96.171.96    <none>        80/TCP                                                     20h
+zipkin                      ClusterIP   10.96.199.146   <none>        9411/TCP                                                   20h
+```
+
+
+
+# 暴露dashboard
+
+
+
+通过ingress来暴露服务(前提已经安装ingress服务, 如nginx-ingress或者treafik)
+
+创建 `istio-ingress.yaml`文件, 内容如下: 
+
+````
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: jaeger-query
+  namespace: istio-system
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+  - host: istio.jaeger-query.com
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: jaeger-query
+          servicePort: 16686
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: prometheus
+  namespace: istio-system
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+  - host: istio.prometheus.com
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: prometheus
+          servicePort: 9090
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: grafana
+  namespace: istio-system
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+  - host: istio.grafana.com
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: grafana
+          servicePort: 3000
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: kiali
+  namespace: istio-system
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+  - host: istio.kiali.com
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: kiali
+          servicePort: 20001
+````
+
+然后创建

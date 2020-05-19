@@ -46,7 +46,97 @@ pod中进程访问apiserver, 是因为apiserver本身也是一个service, 他的
 
 
 
+# Service Account
+
+Service Account 的授权信息和文件，实际上保存在它所绑定的一个特殊的 Secret 对象里的。这个特殊的 Secret 对象，就叫作**ServiceAccountToken**。任何运行在 Kubernetes 集群上的应用，都必须使用这个 ServiceAccountToken 里保存的授权信息，也就是 Token，才可以合法地访问 API Server
+
+Kubernetes 已经为你提供了一个的默认“服务账户”（default Service Account）。并且，任何一个运行在 Kubernetes 里的 Pod，都可以直接使用这个默认的 Service Account，而无需显示地声明挂载它
+
+如果你通过`kubectl describe po xxx`查看一下任意一个运行在 Kubernetes 集群里的 Pod，就会发现，每一个 Pod，都已经自动声明一个类型是 Secret、名为 default-token-xxxx 的 Volume，然后 自动挂载在每个容器的一个固定目录上。
+
+```
+Volumes:
+default-token-s8rbq:
+Type:       Secret (a volume populated by a Secret)
+SecretName:  default-token-s8rbq
+Optional:    false
+```
+
+一旦 Pod 创建完成，容器里的应用就可以直接从这个默认 ServiceAccountToken 的挂载目录里访问到授权信息和文件。这个容器内的路径在 Kubernetes 里是固定的，即：/var/run/secrets/kubernetes.io/serviceaccount
+
+你的应用程序只要直接加载这些授权文件，就可以访问并操作 Kubernetes API 了。而且，如果你使用的是 Kubernetes 官方的 Client 包（`k8s.io/client-go`）的话，它还可以自动加载这个目录下的文件，你不需要做任何配置或者编码操作。
 
 
 
+# StatuefulSet
+
+- 按照标号来扩容或者缩容
+
+- 对statuefulset的访问，必须使用 DNS 记录或者 hostname 的方式，而绝不应该直接访问这些 Pod 的 IP 地址, 因为IP地址会变
+
+- StatuefulSet 对应Headless Service创建的DNS记录格式为
+
+  ```
+  <pod-name>.<svc-name>.<namespace>.svc.cluster.local
+  ```
+
+
+
+# nodeAffinity
+
+怎么对Pod按照标签进行特定节点的调度, 大家一定脱口而出`nodeSelector`
+
+`nodeSelector`是一种简单粗暴的方式, 使用方式也很简单, 分两步: 1. 节点打标签; 2. yaml文件指定需要调度的节点
+
+**`nodeSelector`是一种快要被淘汰的参数**, 替代它的正是nodeAffinity(节点亲和性), 因为其语法更加丰富, 适应不同的场景. 而且还有`Anti-Affinity`(反亲和性), 可以进行简单的逻辑组合了
+
+调度可以分成软策略和硬策略两种方式，软策略就是如果你没有满足调度要求的节点的话，POD 就会忽略这条规则，继续完成调度过程；而硬策略就比较强硬了，如果没有满足条件的节点的话，就不断重试直到满足条件为止
+
+`nodeAffinity`就有两上面两种策略：`preferredDuringSchedulingIgnoredDuringExecution`和`requiredDuringSchedulingIgnoredDuringExecution`，前面的就是软策略，后面的就是硬策略。
+
+示例:
+
+```
+apiVersion: v1
+kind: Pod
+metadata:
+  name: with-node-affinity
+  labels:
+    app: node-affinity-pod
+spec:
+  containers:
+  - name: with-node-affinity
+    image: nginx
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: kubernetes.io/hostname
+            operator: NotIn
+            values:
+            - 192.168.1.140
+            - 192.168.1.161
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 1
+        preference:
+          matchExpressions:
+          - key: source
+            operator: In
+            values:
+            - qikqiak
+```
+
+- 上面这个 POD 首先是要求 POD 不能运行在140和161两个节点上，如果有个节点满足`source=qikqiak`的话就优先调度到这个节点上
+
+- 操作符如下:
+
+  > - In：label 的值在某个列表中
+  > - NotIn：label 的值不在某个列表中
+  > - Gt：label 的值大于某个值
+  > - Lt：label 的值小于某个值
+  > - Exists：某个 label 存在
+  > - DoesNotExist：某个 label 不存在
+
+如果`nodeSelectorTerms`下面有多个选项的话，满足任何一个条件就可以了；如果`matchExpressions`有多个选项的话，则必须同时满足这些条件才能正常调度 POD
 

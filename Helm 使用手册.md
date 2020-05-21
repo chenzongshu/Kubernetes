@@ -226,11 +226,21 @@ grep -irl "extensions/v1beta1" nginx-ingress | grep deploy | xargs sed -i 's#ext
 
 如果有如上报错，需要在 deployment 文件添加 selector：
 
-```
+```bash
 vi nginx-ingress/templates/controller-deployment.yaml
 
 vi nginx-ingress/templates/default-backend-deployment.yaml
 ```
+
+
+
+```
+  selector:
+    matchLabels:
+      app: {{ template "nginx-ingress.name" . }}
+```
+
+
 
 修改后再次执行安装
 

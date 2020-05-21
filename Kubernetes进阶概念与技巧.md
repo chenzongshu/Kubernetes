@@ -40,11 +40,23 @@ pod中进程访问apiserver, 是因为apiserver本身也是一个service, 他的
 
 # RBAC
 
+RBAC三个核心概念: 
+
+1. Role：角色，它其实是一组规则，定义了一组对 Kubernetes API 对象的操作权限。
+2. Subject：被作用者，既可以是“人”，也可以是“机器”，也可以使你在 Kubernetes 里定义的“用户”。
+3. RoleBinding：定义了“被作用者”和“角色”的绑定关系。
+
+Role + RoleBinding + ServiceAccount 的权限分配方式是编写和安装各种插件的时候，经常用到的组合
+
 ## role
 
 - role只能对命名空间内的资源进行授权
 
+## RoleBinding
 
+- 通过roleRef字段来引用对Role的引用, 但是注意`RoleBinding`也是有namespace限制的, 所以roleRef也只能引用本ns的role
+- User只能通过外部认证系统来完成
+- 如果要访问非namespace范围的对象, 只能通过 ClusterRole 和 ClusterRoleBinding 这两个组合了
 
 # Service Account
 
@@ -139,4 +151,24 @@ spec:
   > - DoesNotExist：某个 label 不存在
 
 如果`nodeSelectorTerms`下面有多个选项的话，满足任何一个条件就可以了；如果`matchExpressions`有多个选项的话，则必须同时满足这些条件才能正常调度 POD
+
+
+
+# StorageClass
+
+为什么需要StorageClass?
+
+试想一下, 一个k8s集群有上万个PVC, 要运维手动去创建上万个PV么? 更麻烦的是，随着新的 PVC 不断被提交，运维人员就不得不继续添加新的、能满足条件的 PV，否则新的 Pod 就会因为 PVC 绑定不到 PV 而失败。在实际操作中，这几乎没办法靠人工做到。
+
+我们就可以使用StorageClass, **而 StorageClass 对象的作用，其实就是创建 PV 的模板**
+
+具体地说，StorageClass 对象会定义如下两个部分内容：
+
+- 第一，PV 的属性。比如，存储类型、Volume 的大小等等。
+- 第二，创建这种 PV 需要用到的存储插件。比如，Ceph 等等。这个通过`provisioner`字段来实现
+- parameter字段就是PV的参数
+
+# 本地持久化卷
+
+本地持久化存储Local Persistent Volume, 能够直接使用宿主机上的本地磁盘目录，而不依赖于远程存储服务, 适用于高优先级或者对IO特别敏感的应用,
 

@@ -172,13 +172,18 @@ spec:
 
 Local Persistent Volume是不是等同于HostPath加上NodeAffinity吗？
 
-**绝不应该把一个宿主机上的目录当作 PV 使用**。这是因为，这种本地目录的存储行为完全不可控，它所在的磁盘随时都可能被应用写满，甚至造成整个宿主机宕机。而且，不同的本地目录之间也缺乏哪怕最基础的 I/O 隔离机制。
+**绝不应该把一个宿主机上的目录当作 PV 使用**。这是因为，这种本地目录的存储行为完全不可控，它所在的磁盘随时都可能被应用写满，甚至造成整个宿主机宕机。而且，不同的本地目录之间也缺乏哪怕最基础的 I/O 隔离机制。而且, 必须的保证kubelet或者容器内进程有权限对目录或者文件进行读写.
 
+需要注意的点:
 
+1. 必须使用`nodeAffinity`来描述local volume与Node的绑定关系
 
+2. 不支持dynamic provision, 意味着你必须手动创建PV, 结束之后手动删除PV
 
+3. 创建local PV之前，你需要先保证有对应的storageClass已经创建。并且该storageClass的`volumeBindingMode`必须是`WaitForFirstConsumer`以标识延迟Volume Binding
 
-那kubernetes怎么把Pod调度到对应的节点上呢
+4. 路径必须是一个独立的挂载点, 而不能是一个从属根目录的路径
 
+   > 直接创建路径会得到下面的报错: [discovery.go:201] Path "/data/local/xxx" is not an actual mountpoint (目录不是挂载点，不能用。)
 
 

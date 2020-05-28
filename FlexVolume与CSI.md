@@ -314,3 +314,281 @@ return &csi.ControllerPublishVolumeResponse{}, nil
 
 其中，存储卷由请求中的 VolumeId 来指定。而虚拟机，也就是将要运行 Pod 的宿主机，则由请求中的 NodeId 来指定。这些参数，都是 External Attacher 在发起请求时需要设置的。
 
+External Attacher 的工作原理，是监听（Watch）了一种名叫 VolumeAttachment 的 API 对象。这种 API 对象的主要字段如下所示：
+
+```
+// VolumeAttachmentSpec is the specification of a VolumeAttachment request.
+type VolumeAttachmentSpec struct {
+// Attacher indicates the name of the volume driver that MUST handle this
+// request. This is the name returned by GetPluginName().
+Attacher string
+
+// Source represents the volume that should be attached.
+Source VolumeAttachmentSource
+
+// The node that the volume should be attached to.
+NodeName string
+}
+```
+
+而这个对象的生命周期，正是由 AttachDetachController 负责管理的
+
+这个控制循环的职责，是不断检查 Pod 所对应的 PV，在它所绑定的宿主机上的挂载情况，从而决定是否需要对这个 PV 进行 Attach（或者 Dettach）操作。
+
+而这个 Attach 操作，在 CSI 体系里，就是创建出上面这样一个 VolumeAttachment 对象。可以看到，Attach 操作所需的 PV 的名字（Source）、宿主机的名字（NodeName）、存储插件的名字（Attacher），都是这个 VolumeAttachment 对象的一部分。
+
+而当 External Attacher 监听到这样的一个对象出现之后，就可以立即使用 VolumeAttachment 里的这些字段，封装成一个 gRPC 请求调用 CSI Controller 的 ControllerPublishVolume 方法。
+
+### CSI Node
+
+CSI Node 服务对应的，是 Volume 管理流程里的“Mount 阶段”。它的代码实现，在 node.go 文件里。
+
+kubelet 的 VolumeManagerReconciler 控制循环会直接调用 CSI Node 服务来完成 Volume 的“Mount 阶段”。
+
+不过，在具体的实现中，这个“Mount 阶段”的处理其实被细分成了 NodeStageVolume 和 NodePublishVolume 这两个接口。这里的原因其实也很容易理解: 对于磁盘以及块设备来说，它们被 Attach 到宿主机上之后，就成为了宿主机上的一个待用存储设备。而到了“Mount 阶段”，我们首先需要格式化这个设备，然后才能把它挂载到 Volume 对应的宿主机目录上。
+
+在 kubelet 的 VolumeManagerReconciler 控制循环中，这两步操作分别叫作**MountDevice 和 SetUp。**
+
+其中，MountDevice 操作，就是直接调用了 CSI Node 服务里的 NodeStageVolume 接口。顾名思义，这个接口的作用，就是格式化 Volume 在宿主机上对应的存储设备，然后挂载到一个临时目录（Staging 目录）上。
+
+NodeStageVolume 接口的实现示例如下所示：
+
+```
+func (d *Driver) NodeStageVolume(ctx context.Context, req *csi.NodeStageVolumeRequest) (*csi.NodeStageVolumeResponse, error) {
+...
+
+vol, resp, err := d.doClient.Storage.GetVolume(ctx, req.VolumeId)
+
+...
+
+source := getDiskSource(vol.Name)
+target := req.StagingTargetPath
+
+...
+
+if !formatted {
+ll.Info("formatting the volume for staging")
+if err := d.mounter.Format(source, fsType); err != nil {
+return nil, status.Error(codes.Internal, err.Error())
+}
+} else {
+ll.Info("source device is already formatted")
+}
+
+...
+
+if !mounted {
+if err := d.mounter.Mount(source, target, fsType, options...); err != nil {
+return nil, status.Error(codes.Internal, err.Error())
+}
+} else {
+ll.Info("source device is already mounted to the target path")
+}
+
+...
+return &csi.NodeStageVolumeResponse{}, nil
+}
+```
+
+可以看到，在 NodeStageVolume 的实现里，我们首先通过 API 获取到了这个 Volume 对应的设备路径（getDiskSource）；然后，我们把这个设备格式化成指定的格式（ d.mounter.Format）；最后，我们把格式化后的设备挂载到了一个临时的 Staging 目录（StagingTargetPath）下。
+
+而 SetUp 操作则会调用 CSI Node 服务的 NodePublishVolume 接口。有了上述对设备的预处理工作后，它的实现就非常简单了，如下所示：
+
+```
+func (d *Driver) NodePublishVolume(ctx context.Context, req *csi.NodePublishVolumeRequest) (*csi.NodePublishVolumeResponse, error) {
+...
+source := req.StagingTargetPath
+target := req.TargetPath
+
+mnt := req.VolumeCapability.GetMount()
+options := mnt.MountFlag
+...
+
+if !mounted {
+ll.Info("mounting the volume")
+if err := d.mounter.Mount(source, target, fsType, options...); err != nil {
+return nil, status.Error(codes.Internal, err.Error())
+}
+} else {
+ll.Info("volume is already mounted")
+}
+
+return &csi.NodePublishVolumeResponse{}, nil
+}
+```
+
+可以看到，在这一步实现中，我们只需要做一步操作，即：将 Staging 目录，绑定挂载到 Volume 对应的宿主机目录上。
+
+由于 Staging 目录，正是 Volume 对应的设备被格式化后挂载在宿主机上的位置，所以当它和 Volume 的宿主机目录绑定挂载之后，这个 Volume 宿主机目录的“持久化”处理也就完成了。
+
+当然，我在前面也曾经提到过，对于文件系统类型的存储服务来说，比如 NFS 和 GlusterFS 等，它们并没有一个对应的磁盘“设备”存在于宿主机上，所以 kubelet 在 VolumeManagerReconciler 控制循环中，会跳过 MountDevice 操作而直接执行 SetUp 操作。所以对于它们来说，也就不需要实现 NodeStageVolume 接口了。
+
+## 部署CSI
+
+CSI 插件的 YAML 文件的主要内容如下所示（其中，非重要的内容已经被略去）：
+
+```
+kind: DaemonSet
+apiVersion: apps/v1beta2
+metadata:
+name: csi-do-node
+namespace: kube-system
+spec:
+selector:
+matchLabels:
+app: csi-do-node
+template:
+metadata:
+labels:
+  app: csi-do-node
+  role: csi-do
+spec:
+serviceAccount: csi-do-node-sa
+hostNetwork: true
+containers:
+  - name: driver-registrar
+    image: quay.io/k8scsi/driver-registrar:v0.3.0
+    ...
+  - name: csi-do-plugin
+    image: digitalocean/do-csi-plugin:v0.2.0
+    args :
+      - "--endpoint=$(CSI_ENDPOINT)"
+      - "--token=$(DIGITALOCEAN_ACCESS_TOKEN)"
+      - "--url=$(DIGITALOCEAN_API_URL)"
+    env:
+      - name: CSI_ENDPOINT
+        value: unix:///csi/csi.sock
+      - name: DIGITALOCEAN_API_URL
+        value: https://api.digitalocean.com/
+      - name: DIGITALOCEAN_ACCESS_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: digitalocean
+            key: access-token
+    imagePullPolicy: "Always"
+    securityContext:
+      privileged: true
+      capabilities:
+        add: ["SYS_ADMIN"]
+      allowPrivilegeEscalation: true
+    volumeMounts:
+      - name: plugin-dir
+        mountPath: /csi
+      - name: pods-mount-dir
+        mountPath: /var/lib/kubelet
+        mountPropagation: "Bidirectional"
+      - name: device-dir
+        mountPath: /dev
+volumes:
+  - name: plugin-dir
+    hostPath:
+      path: /var/lib/kubelet/plugins/com.digitalocean.csi.dobs
+      type: DirectoryOrCreate
+  - name: pods-mount-dir
+    hostPath:
+      path: /var/lib/kubelet
+      type: Directory
+  - name: device-dir
+    hostPath:
+      path: /dev
+---
+kind: StatefulSet
+apiVersion: apps/v1beta1
+metadata:
+name: csi-do-controller
+namespace: kube-system
+spec:
+serviceName: "csi-do"
+replicas: 1
+template:
+metadata:
+labels:
+  app: csi-do-controller
+  role: csi-do
+spec:
+serviceAccount: csi-do-controller-sa
+containers:
+  - name: csi-provisioner
+    image: quay.io/k8scsi/csi-provisioner:v0.3.0
+    ...
+  - name: csi-attacher
+    image: quay.io/k8scsi/csi-attacher:v0.3.0
+    ...
+  - name: csi-do-plugin
+    image: digitalocean/do-csi-plugin:v0.2.0
+    args :
+      - "--endpoint=$(CSI_ENDPOINT)"
+      - "--token=$(DIGITALOCEAN_ACCESS_TOKEN)"
+      - "--url=$(DIGITALOCEAN_API_URL)"
+    env:
+      - name: CSI_ENDPOINT
+        value: unix:///var/lib/csi/sockets/pluginproxy/csi.sock
+      - name: DIGITALOCEAN_API_URL
+        value: https://api.digitalocean.com/
+      - name: DIGITALOCEAN_ACCESS_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: digitalocean
+            key: access-token
+    imagePullPolicy: "Always"
+    volumeMounts:
+      - name: socket-dir
+        mountPath: /var/lib/csi/sockets/pluginproxy/
+volumes:
+  - name: socket-dir
+    emptyDir: {}
+```
+
+
+
+我们**部署 CSI 插件的常用原则是：**
+
+**第一，通过 DaemonSet 在每个节点上都启动一个 CSI 插件，来为 kubelet 提供 CSI Node 服务**。这是因为，CSI Node 服务需要被 kubelet 直接调用，所以它要和 kubelet“一对一”地部署起来。
+
+此外，在上述 DaemonSet 的定义里面，除了 CSI 插件，我们还以 sidecar 的方式运行着 driver-registrar 这个外部组件。它的作用，是向 kubelet 注册这个 CSI 插件。这个注册过程使用的插件信息，则通过访问同一个 Pod 里的 CSI 插件容器的 Identity 服务获取到。
+
+需要注意的是，由于 CSI 插件运行在一个容器里，那么 CSI Node 服务在“Mount 阶段”执行的挂载操作，实际上是发生在这个容器的 Mount Namespace 里的。可是，我们真正希望执行挂载操作的对象，都是宿主机 /var/lib/kubelet 目录下的文件和目录。
+
+所以，在定义 DaemonSet Pod 的时候，我们需要把宿主机的 /var/lib/kubelet 以 Volume 的方式挂载进 CSI 插件容器的同名目录下，然后设置这个 Volume 的 mountPropagation=Bidirectional，即开启双向挂载传播，从而将容器在这个目录下进行的挂载操作“传播”给宿主机，反之亦然。
+
+**第二，通过 StatefulSet 在任意一个节点上再启动一个 CSI 插件，为 External Components 提供 CSI Controller 服务**。所以，作为 CSI Controller 服务的调用者，External Provisioner 和 External Attacher 这两个外部组件，就需要以 sidecar 的方式和这次部署的 CSI 插件定义在同一个 Pod 里。
+
+你可能会好奇，为什么我们会用 StatefulSet 而不是 Deployment 来运行这个 CSI 插件呢。
+
+这是因为，由于 StatefulSet 需要确保应用拓扑状态的稳定性，所以它对 Pod 的更新，是严格保证顺序的，即：只有在前一个 Pod 停止并删除之后，它才会创建并启动下一个 Pod。
+
+而像我们上面这样将 StatefulSet 的 replicas 设置为 1 的话，StatefulSet 就会确保 Pod 被删除重建的时候，永远有且只有一个 CSI 插件的 Pod 运行在集群中。这对 CSI 插件的正确性来说，至关重要。
+
+而在今天这篇文章一开始，我们就已经定义了这个 CSI 插件对应的 StorageClass（即：do-block-storage），所以你接下来只需要定义一个声明使用这个 StorageClass 的 PVC 即可，如下所示：
+
+```
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+name: csi-pvc
+spec:
+accessModes:
+- ReadWriteOnce
+resources:
+requests:
+storage: 5Gi
+storageClassName: do-block-storage
+```
+
+当你把上述 PVC 提交给 Kubernetes 之后，你就可以在 Pod 里声明使用这个 csi-pvc 来作为持久化存储了。这一部分使用 PV 和 PVC 的内容，我就不再赘述了。
+
+## 流程总结
+
+对于一个部署了 CSI 存储插件的 Kubernetes 集群来说：
+
+当用户创建了一个 PVC 之后，你前面部署的 StatefulSet 里的 External Provisioner 容器，就会监听到这个 PVC 的诞生，然后调用同一个 Pod 里的 CSI 插件的 CSI Controller 服务的 CreateVolume 方法，为你创建出对应的 PV。
+
+这时候，运行在 Kubernetes Master 节点上的 Volume Controller，就会通过 PersistentVolumeController 控制循环，发现这对新创建出来的 PV 和 PVC，并且看到它们声明的是同一个 StorageClass。所以，它会把这一对 PV 和 PVC 绑定起来，使 PVC 进入 Bound 状态。
+
+然后，用户创建了一个声明使用上述 PVC 的 Pod，并且这个 Pod 被调度器调度到了宿主机 A 上。这时候，Volume Controller 的 AttachDetachController 控制循环就会发现，上述 PVC 对应的 Volume，需要被 Attach 到宿主机 A 上。所以，AttachDetachController 会创建一个 VolumeAttachment 对象，这个对象携带了宿主机 A 和待处理的 Volume 的名字。
+
+这样，StatefulSet 里的 External Attacher 容器，就会监听到这个 VolumeAttachment 对象的诞生。于是，它就会使用这个对象里的宿主机和 Volume 名字，调用同一个 Pod 里的 CSI 插件的 CSI Controller 服务的 ControllerPublishVolume 方法，完成“Attach 阶段”。
+
+上述过程完成后，运行在宿主机 A 上的 kubelet，就会通过 VolumeManagerReconciler 控制循环，发现当前宿主机上有一个 Volume 对应的存储设备（比如磁盘）已经被 Attach 到了某个设备目录下。于是 kubelet 就会调用同一台宿主机上的 CSI 插件的 CSI Node 服务的 NodeStageVolume 和 NodePublishVolume 方法，完成这个 Volume 的“Mount 阶段”。
+
+至此，一个完整的持久化 Volume 的创建和挂载流程就结束了。

@@ -1,12 +1,18 @@
 > 本文代码基于Kubernetes 1.15版本
 
-# kube-proxy功能简介
+# Service原理
 
-`kube- proxy`运行在 kubernetes集群中每个 worker节点上，负责实现 `service`这个概念提供的功能，kubeproxy会把访问 service VIP的请求转发到运行的`pods`上实现负载均衡
+
+
+# kube-proxy
+
+## 功能简介
+
+`kube-proxy`运行在 kubernetes集群中每个 worker节点上，负责实现 `service`这个概念提供的功能，kubeproxy会把访问 service VIP的请求转发到运行的`pods`上实现负载均衡
 
 当用户创建 `service`的时候， `endpointcontroller`会根据 `service`的 `selector`找到对应的pod，然后生成`endpoints`对象保存到`etcd`中， `kube-proxy`的主要工作就是监听etcd（通过 apiserver的接口，而不是直接读取etcd）来实时更新节点上的 `iptables`
 
-# kube-proxy入口
+## kube-proxy入口
 
 和 kubernetes其他组件一样，`kube-proxy`入口在 `kubernetes／cmd／ kube-proxy`，具体的代码如下
 
@@ -32,7 +38,7 @@ func main() {
 - 建命令行的库初始化log，默认刷新间隔30秒
 - 执行命令`command.Execute()`
 
-# NewProxyCommand()
+## NewProxyCommand()
 
 先看看入口
 
@@ -61,7 +67,7 @@ func NewProxyCommand() *cobra.Command {
 - `NewOptions()`创建了一个 `Options`结构体并初始化完成参数的初始化, `Options`包含了 `kube-proxy`需要的一切数据
 - 调用 `opts.Run()` 函数
 
-## Options.Run()
+### Options.Run()
 
 下面来看看`opts.Run()`函数就是跑个 proxy server起来, 里面逻辑很少
 
@@ -131,7 +137,7 @@ type ProxyServer struct {
 
 然后看看 `runLoop()`函数
 
-## runLoop()
+### runLoop()
 
 该函数较短, 主要做了watcher和proxyServer的启动, 调用了2个Run()函数, 其中proxyServer是通过goroutine来启动
 
@@ -214,7 +220,7 @@ func (s *ProxyServer) Run() error {
 - 7、调用 `birthCry`方法。这个方法没什么特别的，就是记录一个 `kube-proxy`启动的事件
 - 8、调用 `SyncLoop`方法，持续运行 `Proxier`, `Proxier`实例化对象是在proxy server对象创建时通过config配置文件或"-proxy-mode"指定
 
-### ServiceConfig
+#### ServiceConfig
 
 `ServiceConfig`和 `endpointsConfig`是一样的, 是 `kube-proxy`中用于监听 `service`和 `endpoint`变化的组件，其本质就是`Informer`，代码在 `pkg/proxy/config/config`：
 
@@ -294,7 +300,7 @@ func (proxier *Proxier) syncProxyRules() {
 }
 ```
 
-## Proxier
+### Proxier
 
 下面来看看`ProxyServer`中另外一个结构体`Proxier`, 是其中一个成员变量`Proxier proxy.ProxyProvider` ,它是interface的具体实现, interface如下:
 

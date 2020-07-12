@@ -10,6 +10,8 @@ kubeedge是华为开源的边缘云容器插件, 基于Kubernetes, 本质上是�
 - Pod对外暴露服务目前只支持hostnetwork模式, 限制颇多
 - 目前cloud core支持二进制和deployment部署, 而edge core只支持二进制部署
 - 目前原生无高可用设计, 得自己考虑
+- Mapper现在kubeedge只提供模型, 和几个参考实现, 推荐使用daemonset部署到每个节点
+- EdgeMesh和一般的SerivceMesh区别是一般ServiceMesh使用SideCar方式, 而EdgeMesh为了减少资源消耗使用每个节点部署一个Proxy, 而且内置域名解析能力, 不依赖于中心DNS
 
 # 实战部署
 
@@ -136,6 +138,46 @@ centos-kata   Ready    master       125d   v1.17.1
 czsedge       Ready    agent,edge   100m   v1.17.1-kubeedge-v1.3.1
 ```
 
+## 安装说明
+
+kubeedge使用的主要有2个文件夹
+
+- `/etc/kubeedge/` : 存放可执行文件, 配置信息, 证书(edge node才会有证书), 目录结构如下:
+
+  ```
+  [root@centos-kata kubeedge]# tree
+  .
+  |-- ca
+  |-- certs
+  |-- config
+  |   `-- cloudcore.yaml
+  |-- crds
+  |   |-- devices
+  |   |   |-- devices_v1alpha1_devicemodel.yaml
+  |   |   `-- devices_v1alpha1_device.yaml
+  |   `-- reliablesyncs
+  |       |-- cluster_objectsync_v1alpha1.yaml
+  |       `-- objectsync_v1alpha1.yaml
+  |-- kubeedge-v1.3.1-linux-amd64
+  |   |-- cloud
+  |   |   |-- admission
+  |   |   |   `-- admission
+  |   |   |-- cloudcore
+  |   |   |   `-- cloudcore
+  |   |   `-- csidriver
+  |   |       `-- csidriver
+  |   |-- edge
+  |   |   `-- edgecore
+  |   `-- version
+  `-- kubeedge-v1.3.1-linux-amd64.tar.gz
+  ```
+
+- `/var/lib/kubeedge` : 云端存放sock文件, edge存放db文件
+
+安装后配置文件的位置是 `/etc/kubeedge/config`,  cloudcore和edgecore配置文件不同
+
+
+
 ## 测试实践
 
 运行一个deployment, 然后查看
@@ -182,7 +224,22 @@ CONTAINER ID        IMAGE                COMMAND                  CREATED       
 
 4. 目前无高可用, 需要把edgecore和docker设置为systemctl模式启动, 并设置开机启动, 不然节点重启之后不能拉起进程.
 
+   edgecore设置为service, 创建service文件如下: 
 
+```
+[root@localhost kubeedge]# cat /etc/systemd/system/edgecore.service
+[Unit]
+Description=edgecore.service
+
+[Service]
+Type=simple
+ExecStart=/etc/kubeedge/kubeedge-v1.3.1-linux-amd64/edge/edgecore
+
+[Install]
+WantedBy=multi-user.target
+```
+
+5. 发现如果cloudcore重启了, edgecore没重启, 就会出问题, 节点连不上
 
 
 

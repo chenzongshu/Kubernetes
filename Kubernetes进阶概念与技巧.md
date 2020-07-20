@@ -48,6 +48,27 @@ RBAC三个核心概念:
 
 Role + RoleBinding + ServiceAccount 的权限分配方式是编写和安装各种插件的时候，经常用到的组合
 
+## Port/nodePort/targetPort
+
+如果你选择了nodePort模式的service， 可以设置三种port, 三种的含义就是
+
+```
+apiVersion: v1
+kind: Service
+metadata:
+ name: nginx-service
+spec:
+ type: NodePort         // 有配置NodePort，外部流量可访问k8s中的服务
+ ports:
+ - port: 30080          // 服务访问端口
+   targetPort: 80       // 容器端口
+   nodePort: 30001      // NodePort
+ selector:
+  name: nginx-pod
+```
+
+port和nodePort都是service的端口，前者暴露给k8s集群内部服务访问，后者暴露给k8s集群外部流量访问。从上两个端口过来的数据都需要经过反向代理kube-proxy，流入后端pod的targetPort上，最后到达pod内的容器。
+
 ## role
 
 - role只能对命名空间内的资源进行授权

@@ -415,3 +415,21 @@ helm template --debug chartDir
 # 适合用于查看服务器上安装好的
 charthelm get manifest
 ```
+
+当你的 YAML 没有解析，但想看看生成了什么时，检索 YAML 的一个简单方法是注释模板中的问题部分，然后重新运行 `helm install --dry-run --debug`：
+
+```yaml
+apiVersion: v1
+# some: problem section
+# {{ .Values.foo | quote }}
+```
+
+以上内容将被完整渲染并返回。
+
+```yaml
+apiVersion: v1
+# some: problem section
+#  "bar"
+```
+
+这提供了一种快速查看生成的容的方式，而不会由于YAML分析错误而被阻止。

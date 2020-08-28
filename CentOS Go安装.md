@@ -8,17 +8,15 @@ tar -C /usr/local -zxvf go1.13.linux-amd64.tar.gz
 
 # 设置环境变量
 
-`vim ~/.profile`
+`vim /etc/profile` 增加
 
 ```
-PATH="$HOME/bin:$HOME/.local/bin:$PATH"
 export PATH=$PATH:/usr/local/go/bin 
 export GOROOT=/usr/local/go 
 export GOPATH=$HOME/go 
-export PATH=$PATH:$HOME/go/bin
 ```
 
-然后重载配置文件`source ~/.profile`
+然后重载配置文件`source /etc/profile`
 
 创建go的PATH目录 `mkdir /root/go`
 

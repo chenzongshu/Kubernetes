@@ -296,3 +296,6 @@ deploy: manifests
 kustomize build config/default | kubectl delete -f -
 ```
 
+# 其他用法
+
+其他比如crt, webhook, finalizer等用法见官方文档： https://book.kubebuilder.io/

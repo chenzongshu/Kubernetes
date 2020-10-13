@@ -534,7 +534,7 @@ $ ./hack/k8s/update-generated.sh
 - Informer:控制器的SharedInformer，用于接收API事件，并呼叫回调函数。
 - InformerSynced: 确认SharedInformer的储存是否以获得至少一次完整list通知。
 - Lister: 用于列出或获取缓存中的VirtualMachine资源。
-- Workqueue:控制器的资源处理队列，都Informer收到事件时，会将物件推到这个队列，并在协调程序取出处理。当发生错误时，可以用于Requeue当前物件。
+- Workqueue:控制器的资源处理队列，都Informer收到事件时，会将物件推到这个队列，并在协调程序取出处理。当发生错误时，可以用于Requeue当前物件。 
 
 ```go
 package controller
@@ -984,7 +984,7 @@ Deployment, Job, DaemonSet等资源, 在删除时候, 其相关的Pod都会被�
 
 但是Kubernetes的垃圾收集器仅能删除Kubernetes API的资源。Kubernetes对于删除级联资源提供了2种模式：
 
-- Background:在这模式下，Kubernetes会直接删除Owner资源，然后再由垃圾收集器在后台删除相关的API资源
+- Background:在这模式下，Kubernetes会直接删除属主资源，然后再由垃圾收集器在后台删除相关的API资源
 
 - Foreground:在这模式下，Owner资源会透过设定`metadta.deletionTimestamp`字段来表示"正在删除中"。这时Owner资源依然存在于集群中，并且能透过REST API查看到相关信息。该资源被删除条件是当移除了`metadata.finalizers`字段后，才会真正的从集群中移除。这样机制形成了预删除挂钩（Pre-delete hook），因此我们能在正在删除的期间，开始回收相关的资源（如虚拟机或其他Kubernetes API资源等等），当回收完后，再将该资源删除。
 

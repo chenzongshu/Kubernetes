@@ -164,4 +164,25 @@ calico网络对底层的网络的要求很少，只要求node之间能够通过I
 
 
 
+# calicoctl
+
+calicoctl是calico访问程序, 需要能够连接 `Etcd`或`APIServer`
+
+有二进制和容器两种形式, 这里我们以二进制举例, 先下载
+
+```
+curl -O -L  https://github.com/projectcalico/calicoctl/releases/download/v3.16.3/calicoctl
+```
+
+然后写配置文件 `/etc/calico/calicoctl.cfg`, 可以直连etcd也可以通过kubeconfig连接apiserver
+
+```
+[root@k8s-master etc]# cat /etc/calico/calicoctl.cfg 
+apiVersion: projectcalico.org/v3
+kind: CalicoAPIConfig
+metadata:
+spec:
+  datastoreType: "kubernetes"
+  kubeconfig: "/root/.kube/config"
+```
 

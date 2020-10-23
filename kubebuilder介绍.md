@@ -287,7 +287,6 @@ make uninstall
 deploy: manifests
 	cd config/manager && kustomize edit set image controller=${IMG}
 	kustomize build config/default | kubectl apply -f -
-
 ```
 
 我们就使用`kustomize`来删除好了

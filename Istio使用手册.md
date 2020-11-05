@@ -1,10 +1,10 @@
-本文基于Istio 1.5.2来安装使用Istio
+本文基于Istio 1.7.4来安装使用Istio
 
-在 Istio 1.5 中，饱受诟病的 `Mixer` 终于被废弃了，新版本的 HTTP 遥测默认基于 in-proxy Stats filter，同时可使用 WebAssembly开发 `in-proxy` 扩展。更详细的说明请参考 Istio 1.5 发布公告: https://istio.io/news/releases/1.5.x/announcing-1.5/
+在 Istio 1.5 以上，饱受诟病的 `Mixer` 终于被废弃了，新版本的 HTTP 遥测默认基于 in-proxy Stats filter，同时可使用 WebAssembly开发 `in-proxy` 扩展。更详细的说明请参考 Istio 1.5 发布公告: https://istio.io/news/releases/1.5.x/announcing-1.5/
 
 # 下载 Istio 部署文件
 
-可以去github下载 https://github.com/istio/istio/releases/tag/1.5.2
+可以去github下载 https://github.com/istio/istio/releases/tag/1.7.4
 
 也可以执行下载命令
 
@@ -12,7 +12,7 @@
 curl -L https://istio.io/downloadIstio | sh -
 ```
 
-下载完成后会得到一个 `istio-1.5.2` 目录，里面包含了：
+下载完成后会得到一个 `istio-1.7.4` 目录，里面包含了：
 
 - `install/kubernetes` : 针对 Kubernetes 平台的安装文件
 
@@ -22,10 +22,12 @@ curl -L https://istio.io/downloadIstio | sh -
 
   
 
-将 istioctl 拷贝到 `/usr/local/bin/` 中
+将 istioctl 拷贝到 `/usr/local/bin/` 中 或者把文件夹中的bin目录添加到系统变量
 
 ```
 cp bin/istioctl /usr/local/bin/
+或者
+export PATH=$PWD/bin:$PATH
 ```
 
  开启 istioctl 的自动补全功能
@@ -45,11 +47,24 @@ source ~/istioctl.bash
 
 # 部署istio
 
-istioctl 提供了多种安装配置文件，可以通过下面的命令查看：
+istioctl 提供了多种安装配置文件，可以在下面位置查看：
 
 ```
-[root@centos-kata istio-1.5.2]# ls install/kubernetes/operator/profiles/
-default.yaml  demo.yaml  empty.yaml  minimal.yaml  remote.yaml  separate.yaml
+ls manifests/profiles/
+default.yaml  demo.yaml  empty.yaml  minimal.yaml  preview.yaml  remote.yaml
+```
+
+也可以使用istioctl命令来看
+
+```
+[root@localhost istio-1.7.4]# istioctl profile list
+Istio configuration profiles:
+    preview
+    remote
+    default
+    demo
+    empty
+    minimal
 ```
 
 
@@ -91,6 +106,22 @@ Istio CNI 插件的主要设计目标是消除这个 privileged 权限的 init c
 > 注意：关键插件只能运行在 `kube-system` namespace 中！
 
 详细内容可以参考[官方文档](https://v1-16.docs.kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/)。
+
+
+
+```
+[root@localhost istio-1.7.4]# istioctl manifest install
+This will install the default Istio profile into the cluster. Proceed? (y/N) y
+Detected that your cluster does not support third party JWT authentication. Falling back to less secure first party JWT. See https://istio.io/docs/ops/best-practices/security/#configure-third-party-service-account-tokens for details.
+✔ Istio core installed
+✔ Istiod installed
+✔ Ingress gateways installed
+✔ Installation complete
+```
+
+
+
+
 
 
 
@@ -399,3 +430,12 @@ spec:
 ````
 
 然后创建
+
+
+
+# 卸载Istio
+
+```
+istioctl manifest generate --set profile=demo | kubectl delete -f -
+```
+

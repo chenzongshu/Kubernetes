@@ -208,3 +208,10 @@ Local Persistent Volume是不是等同于HostPath加上NodeAffinity吗？
    > 直接创建路径会得到下面的报错: [discovery.go:201] Path "/data/local/xxx" is not an actual mountpoint (目录不是挂载点，不能用。)
 
 
+
+# 强制删除Pod
+
+```
+kubectl delete pods <pod> --grace-period=0 --force
+```
+

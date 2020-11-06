@@ -2,7 +2,9 @@
 
 在 Istio 1.5 以上，饱受诟病的 `Mixer` 终于被废弃了，新版本的 HTTP 遥测默认基于 in-proxy Stats filter，同时可使用 WebAssembly开发 `in-proxy` 扩展。更详细的说明请参考 Istio 1.5 发布公告: https://istio.io/news/releases/1.5.x/announcing-1.5/
 
-# 下载 Istio 部署文件
+# Istio部署
+
+## 下载 Istio 部署文件
 
 可以去github下载 https://github.com/istio/istio/releases/tag/1.7.4
 
@@ -45,7 +47,7 @@ source ~/istioctl.bash
 source ~/istioctl.bash
 ```
 
-# 部署istio
+## 部署
 
 istioctl 提供了多种安装配置文件，可以在下面位置查看：
 
@@ -109,6 +111,8 @@ Istio CNI 插件的主要设计目标是消除这个 privileged 权限的 init c
 
 
 
+最简单的安装方式， 安装default模板， 可以使用如下命令
+
 ```
 [root@localhost istio-1.7.4]# istioctl manifest install
 This will install the default Istio profile into the cluster. Proceed? (y/N) y
@@ -119,7 +123,36 @@ Detected that your cluster does not support third party JWT authentication. Fall
 ✔ Installation complete
 ```
 
+如果要安装其他配置文件， 可以使用如下命令
 
+```
+istioctl manifest install --set profile=demo
+```
+
+default模板安装完成可以看到启动的Pod
+
+```
+[root@localhost istio-1.7.4]# kubectl get pods -n istio-system
+NAME                                    READY   STATUS    RESTARTS   AGE
+istio-ingressgateway-55f67b4b7f-722gs   1/1     Running   0          14h
+istiod-7c487bdcd7-8qzn6                 1/1     Running   0          14h
+```
+
+## 检测安装是否成功
+
+使用verify-install来检测每个CRD, Service, Deployment是否安装成功, 不过检测之前需要先生成安装清单
+
+```
+[root@localhost istio-1.7.4]# istioctl manifest generate --set profile=demo > $HOME/generated-manifest.yaml
+
+[root@localhost istio-1.7.4]# istioctl verify-install -f $HOME/generated-manifest.yaml
+CustomResourceDefinition: adapters.config.istio.io.default checked successfully
+......
+Service: istiod.istio-system checked successfully
+Checked 21 custom resource definitions
+Checked 2 Istio Deployments
+Istio is installed successfully
+```
 
 
 
@@ -248,7 +281,7 @@ EOF
 
 
 
-### 只暴露必要端口
+## 只暴露必要端口
 
 从安全的角度来考虑，我们不应该暴露那些不必要的端口，对于 Ingress Gateway 来说，只需要暴露 HTTP、HTTPS 和 metrics 端口就够了。方法和上面一样，直接在 `components.ingressGateways` 的 `overlays` 列表下面加上这么一段：
 
@@ -347,7 +380,7 @@ zipkin                      ClusterIP   10.96.199.146   <none>        9411/TCP  
 
 
 
-# 暴露dashboard
+## 暴露dashboard
 
 
 
@@ -433,7 +466,7 @@ spec:
 
 
 
-# 卸载Istio
+## 卸载Istio
 
 ```
 istioctl manifest generate --set profile=demo | kubectl delete -f -

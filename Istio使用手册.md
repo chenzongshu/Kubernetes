@@ -184,3 +184,16 @@ istioctl manifest generate --set profile=demo | kubectl delete -f -
    $ kubectl apply -f samples/bookinfo/platform/kube/bookinfo.yaml
    ```
 
+    经过漫长的等待，可以看到Pod已经启动成功
+
+    ```
+[root@localhost istio-1.7.4]# kubectl get po
+   NAME                              READY   STATUS    RESTARTS   AGE
+   details-v1-79c697d759-c4p44       2/2     Running   0          2d15h
+   productpage-v1-65576bb7bf-9mdhg   2/2     Running   0          2d15h
+   ratings-v1-7d99676f7f-9ndm9       2/2     Running   0          2d15h
+   reviews-v1-987d495c-78g7k         2/2     Running   0          2d15h
+   reviews-v2-6c5bf657cf-hxmr9       2/2     Running   0          2d15h
+   reviews-v3-5f7b9f4f77-gsj5s       2/2     Running   0          2d15h
+    ```
+

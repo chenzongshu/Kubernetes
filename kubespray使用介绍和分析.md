@@ -18,7 +18,11 @@ Github地址： https://github.com/kubernetes-sigs/kubespray
 
 - 最好用root运行
 
+# 集群安装
+
 ## 安装机
+
+### 安装python和pip
 
 kubespray本身可以放在集群之外， 需要提前安装上面提到的对应软件
 
@@ -37,9 +41,336 @@ make install
 
 如果后面安装太慢可以配置国内pipy源
 
-# 单master集群安装
+### 配置免密
+
+```
+ssh-keygen
+```
+
+然后连续三次回车，生成ssh的公钥和私钥
+
+然后配置ssh单向通道， 将公钥分发给其他机器
+
+```
+ssh-copy-id root@192.168.51.130
+ssh-copy-id root@192.168.51.131
+ssh-copy-id root@192.168.51.132
+```
+
+### kuberspray下载
+
+去github下载最新代码 `https://github.com/kubernetes-sigs/kubespray`
+
+### kuberspray安装
+
+安装依赖
 
 ```
 pip3 install -r requirements.txt
 ```
 
+生成主机组
+
+```
+# 从模板拷贝一份，名字可以自己随意
+cp -rfp inventory/sample inventory/mycluster
+
+# 从inventory builder生成inventory文件
+declare -a IPS=(192.168.51.130 192.168.51.131 192.168.51.132)
+CONFIG_FILE=inventory/mycluster/hosts.yaml python3 contrib/inventory_builder/inventory.py ${IPS[@]}
+
+```
+
+查看集群安装参数，如果有需要， 修改
+
+```
+cat inventory/mycluster/group_vars/all/all.yml
+cat inventory/mycluster/group_vars/k8s-cluster/k8s-cluster.yml
+```
+
+修改阿里源的kubernetes镜像仓库
+
+```
+vim inventory/mycluster/group_vars/k8s-cluster/k8s-cluster.yml
+kube_image_repo: "registry.aliyuncs.com/google_containers"
+```
+
+如果需要安装日志，修改kubespray里面的ansible配置文件
+
+```
+cd ~/kubespray
+echo 'log_path = /var/log/ansible.log' > ansible.cfg
+```
+
+安装Playbook
+
+```
+ansible-playbook -i inventory/mycluster/hosts.yaml --become --become-user=root cluster.yml
+```
+
+### 创建具有操作权限的Dashboard账号
+
+默认的Dashboard登陆token只有浏览权限，没有操作权限，需要创建一个admin账号
+
+```
+cd /tmp/
+
+cat >k8s-admin.yaml<<EOF
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dashboard-admin
+  namespace: kube-system
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: dashboard-admin
+subjects:
+  - kind: ServiceAccount
+    name: dashboard-admin
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+EOF
+
+kubectl create -f k8s-admin.yaml
+
+# 将获取token的语句存入脚本
+cat >k8s-dashboard-info.sh<<EOF
+#!/bin/bash
+source ~/.bash_profile
+kubectl cluster-info
+echo -e '\n默认登陆Token:'
+SecretName=\$(kubectl get secret -o wide --all-namespaces|grep namespace-controller-token|awk '{print \$2}')
+kubectl describe secret \${SecretName} -n kube-system| grep ^token|awk '{print \$2}'
+echo -e '\n具有操作权限的Token:'
+SecretName=\$(kubectl get secret -o wide --all-namespaces|grep dashboard-admin|awk '{print \$2}')
+kubectl describe secret \${SecretName} -n kube-system|grep ^token|awk '{print \$2}'
+EOF
+
+bash k8s-dashboard-info.sh
+```
+
+### 安装其他插件
+
+如果需要安装其他插件如 nginx-ingress或者 metallb等， 可以修改`inventory/mycluster/group_vars/k8s-cluster/addons.yml` 文件中的对应组件的开关，
+
+### 高可用部署
+
+本身kubespray内置了一个local LB： nginx， 这个LB的做法很特别，不是给master做LB，是在每个worker节点上面部署一个nginx，然后修改kubelet的配置，让kubelet连接到APIServer的时候是连接到本地nginx，nginx再指向多个APIServer，这样就达到了高可用的目的
+
+
+
+### 国内无法下载问题
+
+kubectl、kubelet、kubeadm要去google下载， 国外访问不通，解决方法如下：
+
+用nginx建一个简单的文件下载服务器，方法略，然后去github上kubernetes仓库下载对应版本二进制包，放到文件服务器下，然后修改 `roles/download/defaults/main.yml`， 修改成类似样子
+
+```
+kubelet_download_url: "http://192.168.106.95/kubelet"
+kubectl_download_url: "http://192.168.106.95/kubectl"
+kubeadm_download_url: "http://192.168.106.95/kubeadm"
+```
+
+`cluster-proportional-autoscaler-amd64`这个镜像阿里云上没有，必须另外找源，找到如下，然后重新打tag
+
+```
+docker pull mirrorgcrio/cluster-proportional-autoscaler-amd64:1.8.1
+docker tag mirrorgcrio/cluster-proportional-autoscaler-amd64:1.8.1 registry.aliyuncs.com/google_containers/cluster-proportional-autoscaler-amd64:1.8.1
+```
+
+## 卸载
+
+```
+ansible-playbook -i inventory/mycluster/hosts.yaml --become --become-user=root reset.yml
+```
+
+然后到每个节点执行
+
+```
+rm -rf /etc/kubernetes/
+rm -rf /var/lib/kubelet
+rm -rf /var/lib/etcd
+rm -rf /usr/local/bin/kubectl
+rm -rf /etc/systemd/system/calico-node.service
+rm -rf /etc/systemd/system/kubelet.service
+systemctl stop etcd.service
+systemctl disable etcd.service
+systemctl stop calico-node.service
+systemctl disable calico-node.service
+docker stop $(docker ps -q)
+docker rm $(docker ps -a -q)
+service docker restart
+```
+
+## 说明
+
+### inventory
+
+inventory有几个组
+
+- **kube-node** : 能部署Pod节点的
+- **kube-master** : 部署master组件的
+- **etcd**: 部署Etcd的，注意，Etcd是以镜像方式，在kubernetes集群外单独部署的，和原生kubeadm不同
+- **calico-rr** : 
+- **bastion** : 配置堡垒机的（如果节点不能直达）
+
+# 模板解析
+
+可以从github的安装文档可以看到， 安装集群执行的是，执行`cluster.yml`
+
+```
+ansible-playbook -i inventory/mycluster/hosts.yaml  --become --become-user=root cluster.yml
+```
+
+我们看看这个yaml
+
+```
+---
+- name: Check ansible version
+  import_playbook: ansible_version.yml
+
+- hosts: all
+  gather_facts: false
+  tags: always
+  tasks:
+    - name: "Set up proxy environment"
+      set_fact:
+        proxy_env:
+          http_proxy: "{{ http_proxy | default ('') }}"
+          HTTP_PROXY: "{{ http_proxy | default ('') }}"
+          https_proxy: "{{ https_proxy | default ('') }}"
+          HTTPS_PROXY: "{{ https_proxy | default ('') }}"
+          no_proxy: "{{ no_proxy | default ('') }}"
+          NO_PROXY: "{{ no_proxy | default ('') }}"
+      no_log: true
+
+- hosts: bastion[0]
+  gather_facts: False
+  roles:
+    - { role: kubespray-defaults }
+    - { role: bastion-ssh-config, tags: ["localhost", "bastion"] }
+
+- hosts: k8s-cluster:etcd
+  strategy: linear
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  gather_facts: false
+  roles:
+    - { role: kubespray-defaults }
+    - { role: bootstrap-os, tags: bootstrap-os}
+
+- name: Gather facts
+  tags: always
+  import_playbook: facts.yml
+
+- hosts: k8s-cluster:etcd
+  gather_facts: False
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kubespray-defaults }
+    - { role: kubernetes/preinstall, tags: preinstall }
+    - { role: "container-engine", tags: "container-engine", when: deploy_container_engine|default(true) }
+    - { role: download, tags: download, when: "not skip_downloads" }
+  environment: "{{ proxy_env }}"
+
+- hosts: etcd
+  gather_facts: False
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kubespray-defaults }
+    - role: etcd
+      tags: etcd
+      vars:
+        etcd_cluster_setup: true
+        etcd_events_cluster_setup: "{{ etcd_events_cluster_enabled }}"
+      when: not etcd_kubeadm_enabled| default(false)
+
+- hosts: k8s-cluster
+  gather_facts: False
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kubespray-defaults }
+    - role: etcd
+      tags: etcd
+      vars:
+        etcd_cluster_setup: false
+        etcd_events_cluster_setup: false
+      when: not etcd_kubeadm_enabled| default(false)
+
+- hosts: k8s-cluster
+  gather_facts: False
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kubespray-defaults }
+    - { role: kubernetes/node, tags: node }
+  environment: "{{ proxy_env }}"
+
+- hosts: kube-master
+  gather_facts: False
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kubespray-defaults }
+    - { role: kubernetes/master, tags: master }
+    - { role: kubernetes/client, tags: client }
+    - { role: kubernetes-apps/cluster_roles, tags: cluster-roles }
+
+- hosts: k8s-cluster
+  gather_facts: False
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kubespray-defaults }
+    - { role: kubernetes/kubeadm, tags: kubeadm}
+    - { role: network_plugin, tags: network }
+    - { role: kubernetes/node-label, tags: node-label }
+
+- hosts: calico-rr
+  gather_facts: False
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kubespray-defaults }
+    - { role: network_plugin/calico/rr, tags: ['network', 'calico_rr'] }
+
+- hosts: kube-master[0]
+  gather_facts: False
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kubespray-defaults }
+    - { role: kubernetes-apps/rotate_tokens, tags: rotate_tokens, when: "secret_changed|default(false)" }
+    - { role: win_nodes/kubernetes_patch, tags: ["master", "win_nodes"] }
+
+- hosts: kube-master
+  gather_facts: False
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kubespray-defaults }
+    - { role: kubernetes-apps/external_cloud_controller, tags: external-cloud-controller }
+    - { role: kubernetes-apps/network_plugin, tags: network }
+    - { role: kubernetes-apps/policy_controller, tags: policy-controller }
+    - { role: kubernetes-apps/ingress_controller, tags: ingress-controller }
+    - { role: kubernetes-apps/external_provisioner, tags: external-provisioner }
+
+- hosts: kube-master
+  gather_facts: False
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kubespray-defaults }
+    - { role: kubernetes-apps, tags: apps }
+  environment: "{{ proxy_env }}"
+
+- hosts: k8s-cluster
+  gather_facts: False
+  any_errors_fatal: "{{ any_errors_fatal | default(true) }}"
+  roles:
+    - { role: kubespray-defaults }
+    - { role: kubernetes/preinstall, when: "dns_mode != 'none' and resolvconf_mode == 'host_resolvconf'", tags: resolvconf, dns_late: true }
+```
+
+1、检查ansible版本
+
+2、设置`proxy_env`的fact
+
+3、给`bastion[0]`的主机引用了2个role，`kubespray-defaults`和`bastion-ssh-config`

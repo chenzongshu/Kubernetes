@@ -183,6 +183,8 @@ docker pull mirrorgcrio/cluster-proportional-autoscaler-amd64:1.8.1
 docker tag mirrorgcrio/cluster-proportional-autoscaler-amd64:1.8.1 registry.aliyuncs.com/google_containers/cluster-proportional-autoscaler-amd64:1.8.1
 ```
 
+Ingress-nginx对应的组件阿里云上也没有，需要自己提前下载好
+
 ## 卸载
 
 ```
@@ -221,7 +223,9 @@ inventory有几个组
 
 # 模板解析
 
-可以从github的安装文档可以看到， 安装集群执行的是，执行`cluster.yml`
+## 主流程步骤
+
+可以从github的安装文档可以看到， 安装集群执行的是，执行`cluster.yml`， 总共16个步骤
 
 ```
 ansible-playbook -i inventory/mycluster/hosts.yaml  --become --become-user=root cluster.yml
@@ -369,8 +373,152 @@ ansible-playbook -i inventory/mycluster/hosts.yaml  --become --become-user=root 
     - { role: kubernetes/preinstall, when: "dns_mode != 'none' and resolvconf_mode == 'host_resolvconf'", tags: resolvconf, dns_late: true }
 ```
 
-1、检查ansible版本
+1、范围：本地 ；
 
-2、设置`proxy_env`的fact
+​      操作：检查ansible版本
 
-3、给`bastion[0]`的主机引用了2个role，`kubespray-defaults`和`bastion-ssh-config`
+2、范围：所有
+
+​      操作：设置`proxy_env`的这一组fact，后面task使用
+
+3、范围：`bastion[0]`
+
+​      操作：引用2个role，`kubespray-defaults`和`bastion-ssh-config`，如果没有堡垒机，这步会跳过
+
+4、范围：`k8s-cluster` 和 `etcd`
+
+​      操作：引用2个role，`kubespray-defaults` ，`bootstrap-os`
+
+5、导入了 `facts.yml` 的playbook
+
+6、范围：`k8s-cluster` 和 `etcd`
+
+​     操作：引用4个role，`kubespray-defaults` ，`kubernetes/preinstall`，`container-engine`，`download`
+
+7、范围： `etcd` 
+
+​     操作：引用2个role，`kubespray-defaults` ，`etcd`，附带参数为：
+
+> ​      etcd_cluster_setup: true
+>
+> ​      etcd_events_cluster_setup: "{{ etcd_events_cluster_enabled }}"
+>
+>  when: not etcd_kubeadm_enabled| default(false)
+
+8、范围： `k8s-cluster`
+
+​     操作：引用2个role，`kubespray-defaults` ，`etcd`，附带参数为：
+
+> ​        etcd_cluster_setup: false
+>
+> ​        etcd_events_cluster_setup: false
+>
+> ​      when: not etcd_kubeadm_enabled| default(false)
+
+第7，8步都是部署Etcd，只是部署参数和范围不同， 主要在下面2个参数
+
+- etcd_cluster_setup：
+- etcd_events_cluster_setup：
+
+9、范围： `k8s-cluster`
+
+​     操作：引用2个role，`kubespray-defaults` ，`kubernetes/node`
+
+10、范围： `k8s-master`
+
+​     操作：引用4个role，`kubespray-defaults` ，`kubernetes/master`，`kubernetes/client`，`kubernetes-apps/cluster_roles`
+
+11、范围： `k8s-cluster`
+
+​     操作：引用4个role，`kubespray-defaults` ， `kubernetes/kubeadm`， `network_plugin`， `kubernetes/node-label`
+
+12、范围： `calico-rr`， 一般情况下这步不会执行
+
+​     操作：引用2个role，`kubespray-defaults` ，`network_plugin/calico/rr`
+
+13、范围： `kube-master[0]`
+
+​     操作：引用3个role，`kubespray-defaults` ， `kubernetes-apps/rotate_tokens`， `win_nodes/kubernetes_patch`， 
+
+14、范围： `kube-master`
+
+​     操作：引用5个role，`kubespray-defaults` ， `kubernetes-apps/external_cloud_controller`， `kubernetes-apps/network_plugin`， `kubernetes-apps/policy_controller`， `kubernetes-apps/ingress_controller`， `kubernetes-apps/external_provisioner`
+
+15、范围： `kube-master`
+
+​     操作：引用2个role，`kubespray-defaults` ，  `kubernetes-apps`
+
+16、范围： `k8s-cluster`
+
+​     操作：引用2个role，`kubespray-defaults` ，`kubernetes/preinstall`
+
+## Role含义解析
+
+### kubespray-defaults
+
+主要做一些变量设置的工作
+
+### bootstrap-os
+
+- 从`/etc/os-release`或者OS类型，执行不同的yaml文件，CentOS执行操作如下：
+  - 禁用掉fastestmirror的插件，加快yum速度
+  - 如果定义了http proxy就加到`/etc/yum.conf`里面
+  - 安装libselinux-python方便ansible操作selinux
+- 建了一个`~/.ansible/tmp`文件夹
+- 更新hostname
+- 如果开启了`rbd_provisioner_enabled`则安装ceph-commmon
+- 确保`bash_completion.d`文件夹存在
+
+### kubernetes/preinstall
+
+做了12步操作
+
+- 关闭swap
+- 做了很多配置项参数检测，过滤了不合法的配置项
+- 检测是否有credentials相关文件
+- 设置fact，后面使用
+- 安装kubernetes格式建对应文件夹
+- `0061-systemd-resolved.yml` 到 `0062-networkmanager.yml`都是设置域名解析，需要在特定条件才执行，
+- 安装了一些repo，ipvs需要的软件，还有ansible需要的包
+- 做系统参数的配置，比如selinux，ip forward等
+- 配置`/etc/hosts`文件
+
+### container-engine
+
+以docker为例，检测内核版本，设置docker-ce仓库，安装并启动docker，设置系统变量
+
+### download
+
+下载二进制和镜像
+
+### etcd
+
+- 生成etcd证书
+- 通过脚本建立etcd集群
+
+### kubernetes/node
+
+设置kubelet
+
+### kubernetes/master
+
+- 拷贝kubectl并设置权限和命令补全
+
+- 检查kubeadm各项
+
+- 生成kubeadm的配置文件
+
+- 创建集群，保存token
+
+### kubernetes/client
+
+构建kubeconfig文件
+
+### kubernetes-apps/cluster_roles
+
+配置集群的ClusterRole和ClusterRoleBinding ，设置webhook （？）
+
+### kubernetes/kubeadm
+
+更新kubeadm token，节点join到集群
+

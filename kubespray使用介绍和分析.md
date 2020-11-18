@@ -1,3 +1,5 @@
+[TOC]
+
 # kubespray介绍
 
 kubespray是kubernetes-SIG 基于ansible提供的kubernetes集群安装工具

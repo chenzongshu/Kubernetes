@@ -32,6 +32,33 @@ done
 load-load.sh tar
 ```
 
+# 一次所有镜像打tag并上传到某个仓库
+
+```
+#!/bin/bash
+
+readonly new_repo=registry.cn-shenzhen.aliyuncs.com/kubespray_pub
+
+for image in $(docker images --format '{{.Repository}}:{{.Tag}}'); do
+	name=${image##*/}
+	new_img=${new_repo}/${name}
+	echo "Processing ${image} -> ${new_img}"
+	docker tag ${image} ${new_img}
+	docker push ${new_img}
+done
+```
+
+# 批量删除镜像
+
+```
+# 按条件筛选之后删除镜像
+docker rmi `docker images | grep xxxxx | awk '{print $3}'`
+docker rmi `docker images --format '{{.Repository}}:{{.Tag}}'| grep xxxxx`
+
+# 直接删除所有镜像
+docker rmi `docker images -q`
+```
+
 # 清理非 Running 的 pod
 
 ```

@@ -164,11 +164,39 @@ bash k8s-dashboard-info.sh
 
 本身kubespray内置了一个local LB： nginx， 这个LB的做法很特别，不是给master做LB，是在每个worker节点上面部署一个nginx，然后修改kubelet的配置，让kubelet连接到APIServer的时候是连接到本地nginx，nginx再指向多个APIServer，这样就达到了高可用的目的
 
+### 安装问题
 
+- 最好不要下载python最新版本，不然编译生成的时候容易出错，因为其他依赖组件不是最新
+
+- pip3安装kubespray依赖报错 pip版本问题
+
+  ```
+  ERROR: Command errored out with exit status 1: python setup.py egg_info Check the logs for full command output.
+  WARNING: You are using pip version 19.2.3, however version 20.2.4 is available.
+  You should consider upgrading via the 'pip install --upgrade pip' command.
+  ```
+
+  解决：
+
+  ```
+  pip3 install --upgrade pip
+  ```
+
+- pip3报错找不到 `_ctypes` 模块
+
+  ```
+  ModuleNotFoundError: No module named '_ctypes'
+  ```
+
+  ```
+  yum install libffi-devel -y
+  ```
+
+  然后使用 `make && make install` 重新编译生成python3即可 
 
 ### 国内无法下载问题
 
-kubectl、kubelet、kubeadm要去google下载， 国外访问不通，解决方法如下：
+- kubectl、kubelet、kubeadm要去google下载， 国外访问不通，解决方法如下：
 
 用nginx建一个简单的文件下载服务器，方法略，然后去github上kubernetes仓库下载对应版本二进制包，放到文件服务器下，然后修改 `roles/download/defaults/main.yml`， 修改成类似样子
 
@@ -178,7 +206,7 @@ kubectl_download_url: "http://192.168.106.95/kubectl"
 kubeadm_download_url: "http://192.168.106.95/kubeadm"
 ```
 
-`cluster-proportional-autoscaler-amd64`这个镜像阿里云上没有，必须另外找源，找到如下，然后重新打tag
+- `cluster-proportional-autoscaler-amd64`这个镜像阿里云上没有，必须另外找源，找到如下，然后重新打tag
 
 ```
 docker pull mirrorgcrio/cluster-proportional-autoscaler-amd64:1.8.1
@@ -186,6 +214,17 @@ docker tag mirrorgcrio/cluster-proportional-autoscaler-amd64:1.8.1 registry.aliy
 ```
 
 Ingress-nginx对应的组件阿里云上也没有，需要自己提前下载好
+
+- docker下载不了
+
+`roles/container-engine/docker/defaults/main.yml`修改成阿里云的源
+
+```
+docker_rh_repo_base_url: 'https://mirrors.aliyun.com/docker-ce/linux/centos/7/$basearch/stable'
+docker_rh_repo_gpgkey: 'https://mirrors.aliyun.com/docker-ce/linux/centos/gpg'
+```
+
+
 
 ## 卸载
 

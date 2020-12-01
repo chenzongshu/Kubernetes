@@ -1,6 +1,6 @@
 # 源码结构
 
-`client-go`已经集成到 `kubernetes`源码当中， 目录是`staging\src\k8s.io\client-go`
+`client-go`已经集成到 `kubernetes`源码当中， 目录是vendor\k8s.io\client-go`
 
 ```
 # tree . -L 1

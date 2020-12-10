@@ -87,6 +87,18 @@ Watch机制基于HTTP的Chunked实现，维护一个长连接，减少请求的�
 
 SharedInformer可以让同一种资源使用的是同一个Informer，例如v1版本的Deployment和v1beta1版本的Deployment同时存在的时候，共享一个Informer。
 
+每一个Kubernetes资源都实现了Informer机制，比如PodInformer，就实现了Informer() ， Lister()
+
+```
+//  client-go/informers/core/v1/pod.go
+type PodInformer interface {
+	Informer() cache.SharedIndexInformer
+	Lister() v1.PodLister
+}
+```
+
+
+
 ## 概念释义
 
 ### resourceVersion
@@ -186,9 +198,13 @@ type DeltaFIFO struct {
     keyFunc KeyFunc               // 对象键计算函数
     knownObjects KeyListerGetter  // 该对象指向的就是Indexer，
     closed     bool               // 是否已经关闭的标记
-    closedLock sync.Mutex         // 专为关闭设计的所
-
+    emitDeltaTypeReplaced bool    // 专为关闭设计的所
+}
 ```
+
+DeltaFIFO结构中比较难以理解的是knownObjects，它的类型为KeyListerGetter。其接口中的方法ListKeys和GetByKey也是Store接口中的方法，因此knownObjects能够被赋值为实现了Store的类型指针；同样地，由于Indexer继承了Store方法，因此knownObjects能够被赋值为实现了Indexer的类型指针。
+
+DeltaFIFO.knownObjects.GetByKey就是执行的store.go中的GetByKey函数，用于获取Indexer中的对象键。
 
 ### Delta
 
@@ -371,14 +387,12 @@ func (r *Reflector) ListAndWatch(stopCh <-chan struct{}) error {
 			}
 			return err
 		}
-
+    
+    // watchHandler实现从watch返回的chan中持续读取变化的资源，并转换为DeltaFIFO相应的调用
 		if err := r.watchHandler(start, w, &resourceVersion, resyncerrc, stopCh); err != nil {
 			if err != errorStopRequested {
 				switch {
 				case isExpiredError(err):
-					// Don't set LastSyncResourceVersionUnavailable - LIST call with ResourceVersion=RV already
-					// has a semantic that it returns data at least as fresh as provided RV.
-					// So first try to LIST with setting RV to resource version of last observed object.
 					klog.V(4).Infof("%s: watch of %v closed with: %v", r.name, r.expectedTypeName, err)
 				default:
 					klog.Warningf("%s: watch of %v ended with: %v", r.name, r.expectedTypeName, err)
@@ -390,9 +404,25 @@ func (r *Reflector) ListAndWatch(stopCh <-chan struct{}) error {
 }
 ```
 
-
+1. Reflector利用apiserver的client列举全量对象(版本为0以后的对象全部列举出来)
+2. 将全量对象采用Replace()接口同步到DeltaFIFO中，并且更新资源的版本号，这个版本号后续会用到；
+3. 开启一个协程定时执行resync，如果没有设置定时同步则不会执行，同步就是把全量对象以同步事件的方式通知出去；
+4. 通过apiserver的client监控(watch)资源，监控的当前资源版本号以后的对象，因为之前的都已经获取到了；
+5. 一旦有对象发生变化，那么就会根据变化的类型(新增、更新、删除)调用DeltaFIFO的相应接口，产生一个相应的对象Delta，同时更新当前资源的版本；
 
 # WorkQueue
+
+ indexer用于保存apiserver的资源信息，而**workqueue用于保存informer中的handler处理之后的数据**
+
+WorkQueue支持三种队列：
+
+- Interface：FIFO队列接口
+- DelayingInterface：延迟队列接口，延迟一段时间再把元素存入队列
+- RateLimitingInterface：限速队列接口，基于DelayingInterface封装，支持元素存入队列是进行限速
+  - 令牌桶算法
+  - 排队指数算法
+  - 计数器算法
+  - 混合模式
 
 
 

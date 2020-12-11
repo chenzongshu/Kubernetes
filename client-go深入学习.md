@@ -417,7 +417,7 @@ func (r *Reflector) ListAndWatch(stopCh <-chan struct{}) error {
 WorkQueue支持三种队列：
 
 - Interface：FIFO队列接口
-- DelayingInterface：延迟队列接口，延迟一段时间再把元素存入队列
+- DelayingInterface：延迟队列接口，基于 Interface 接口封装，延迟一段时间再把元素存入队列
 - RateLimitingInterface：限速队列接口，基于DelayingInterface封装，支持元素存入队列是进行限速
   - 令牌桶算法
   - 排队指数算法

@@ -564,6 +564,10 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 }
 ```
 
+最后真正创建容器的逻辑是调用`containerRuntime.SyncPod`
+
+
+
 
 
 https://www.jianshu.com/p/9184152aa118

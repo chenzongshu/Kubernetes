@@ -67,7 +67,7 @@ kubectl get pod -o wide --all-namespaces | awk '{if($4!="Running"){cmd="kubectl 
 
 # 进入容器 netns
 
-粘贴脚本到命令行:
+（该命令就是本质就是使用nsenter）粘贴脚本到命令行:
 
 ```bash
 function e() {

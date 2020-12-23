@@ -566,10 +566,188 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
 最后真正创建容器的逻辑是调用`containerRuntime.SyncPod`
 
+```go
+// file: pkg/kubelet/kuberuntime/kuberuntime_manager.go
+func (m *kubeGenericRuntimeManager) SyncPod(pod *v1.Pod, podStatus *kubecontainer.PodStatus, pullSecrets []v1.Secret, backOff *flowcontrol.Backoff) (result kubecontainer.PodSyncResult) {
+  // Step1: 首先会调用computePodActions计算一下有哪些pod中container有没有变化，有哪些container需要创建,有哪些container需要kill掉；
+	podContainerChanges := m.computePodActions(pod, podStatus)
+	...
+ 
+	// Step2：kill掉 sandbox 已经改变的 pod；
+	if podContainerChanges.KillPod {
+		...
+		//kill容器操作
+		killResult := m.killPodWithSyncResult(pod, kubecontainer.ConvertPodStatusToRunningPod(m.runtimeName, podStatus), nil)
+		result.AddPodSyncResult(killResult)
+		...
+	} else { 
+		// kill掉ContainersToKill列表中的container
+		for containerID, containerInfo := range podContainerChanges.ContainersToKill {
+			... 
+			if err := m.killContainer(pod, containerID, containerInfo.name, containerInfo.message, nil); err != nil {
+				killContainerResult.Fail(kubecontainer.ErrKillContainer, err.Error())
+				klog.Errorf("killContainer %q(id=%q) for pod %q failed: %v", containerInfo.name, containerID, format.Pod(pod), err)
+				return
+			}
+		}
+	}
+ 
+	// Step3：调用pruneInitContainersBeforeStart方法清理同名的 Init Container
+	m.pruneInitContainersBeforeStart(pod, podStatus)
+ 
+  // Step4：调用createPodSandbox方法，创建需要被创建的Sandbox
+	podSandboxID := podContainerChanges.SandboxID 
+	if podContainerChanges.CreateSandbox {
+		...
+		podSandboxID, msg, err = m.createPodSandbox(pod, podContainerChanges.Attempt)
+		... 
+	}
+ 
+	podIP := ""
+	if len(podIPs) != 0 {
+		podIP = podIPs[0]
+	}
+	...
+	//生成Sandbox的config配置，如pod的DNS、hostName、端口映射
+	podSandboxConfig, err := m.generatePodSandboxConfig(pod, podContainerChanges.Attempt)
+	if err != nil {
+		...
+		return
+	}
+ 
+  // 这里只是定义了一个start函数，下面会直接调用这个函数来启动那个容器
+	start := func(typeName string, spec *startSpec) error {
+		...
+		if msg, err := m.startContainer(podSandboxID, podSandboxConfig, spec, pod, podStatus, pullSecrets, podIP, podIPs); err != nil {
+			...
+		} 
+		return nil
+	}
 
+	// Step5：如果开启了临时容器Ephemeral Container，那么需要创建相应的临时容器
+	if utilfeature.DefaultFeatureGate.Enabled(features.EphemeralContainers) {
+		for _, idx := range podContainerChanges.EphemeralContainersToStart {
+			start("ephemeral container", ephemeralContainerStartSpec(&pod.Spec.EphemeralContainers[idx]))
+		}
+	}
+ 
+	// Step6：获取NextInitContainerToStart中的container，调用startContainer启动init container
+	if container := podContainerChanges.NextInitContainerToStart; container != nil { 
+		if err := start("init container", containerStartSpec(container)); err != nil {
+			return
+		}
+	} 
+	// Step7：获取ContainersToStart列表中的container，调用startContainer启动containers列表
+	for _, idx := range podContainerChanges.ContainersToStart {
+		start("container", containerStartSpec(&pod.Spec.Containers[idx]))
+	}
 
+	return
+}
+```
 
+##### startContainer
 
-https://www.jianshu.com/p/9184152aa118
+```go
+func (m *kubeGenericRuntimeManager) startContainer(podSandboxID string, podSandboxConfig *runtimeapi.PodSandboxConfig, container *v1.Container, pod *v1.Pod, podStatus *kubecontainer.PodStatus, pullSecrets []v1.Secret, podIP string, containerType kubecontainer.ContainerType) (string, error) {
+    // Step 1: pull the image.
+    imageRef, msg, err := m.imagePuller.EnsureImageExists(pod, container, pullSecrets)
+    // Step 2: create the container.
+    ref, err := kubecontainer.GenerateContainerRef(pod, container)
+    containerConfig, cleanupAction, err := m.generateContainerConfig(container, pod, restartCount, podIP, imageRef, containerType)
+    containerID, err := m.runtimeService.CreateContainer(podSandboxID, containerConfig, podSandboxConfig)
+    err = m.internalLifecycle.PreStartContainer(pod, container, containerID)
+    // Step 3: start the container.
+    err = m.runtimeService.StartContainer(containerID)
+    // Step 4: execute the post start hook.
+    msg, handlerErr := m.runner.Run(kubeContainerID, pod, container, container.Lifecycle.PostStart)
+}
+```
 
-https://www.cnblogs.com/luozhiyun/p/13736569.html
+- 默认`sandbox` image为 `gcr.io/google_containers/pause-amd64:3.0`
+- 最终调用是通过docker API POST方法调用，比如创建容器就是 `/containers/creat`
+- 重新写入resolv.conf由docker产生，pod里的容器共享
+- 为容器建立网络，通过CNI建立网络，建立loopback接口，建立网络设置为混杂模式（调用命令ip link show dev / ip set bridgeName promisc on)
+
+##### 调用到Docker的流程
+
+下面来看看是怎么调用到docker里面的，以StartContainer为例
+
+上面一小节有追到启动时调用到 `runtimeService.StartContainer`， 这是一个interface
+
+```go
+type ContainerManager interface {
+  ······
+	StartContainer(containerID string) error
+	······
+}
+```
+
+实现函数在 `pkg/kubelet/kuberuntime/instrumented_services.go`
+
+```go
+func (in instrumentedRuntimeService) StartContainer(containerID string) error {
+·····
+	err := in.service.StartContainer(containerID)
+·····
+}
+```
+
+调用到了 `pkg/kubelet/cri/remote/remote_runtime.go`
+
+```go
+func (r *RemoteRuntimeService) StartContainer(containerID string) error {
+······
+	_, err := r.runtimeClient.StartContainer(ctx, &runtimeapi.StartContainerRequest{
+		ContainerId: containerID,
+	})
+······
+}
+```
+
+这个是一个grpc接口，接口定义在 `pkg/apis/runtime/v1alpha2/api.pb.go`
+
+```go
+func (c *runtimeServiceClient) StartContainer(ctx context.Context, in *StartContainerRequest, opts ...grpc.CallOption) (*StartContainerResponse, error) {
+	out := new(StartContainerResponse)
+	err := c.cc.Invoke(ctx, "/runtime.v1alpha2.RuntimeService/StartContainer", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+```
+
+grpc-server实现在dockershim中， `pkg/kubelet/dockershim/docker_container.go`
+
+```go
+func (ds *dockerService) StartContainer(_ context.Context, r *runtimeapi.StartContainerRequest) (*runtimeapi.StartContainerResponse, error) {
+   err := ds.client.StartContainer(r.ContainerId)
+   ······
+   return &runtimeapi.StartContainerResponse{}, nil
+}
+```
+
+调用 `pkg/kubelet/dockershim/libdocker/kube_docker_client.go`
+
+```go
+func (d *kubeDockerClient) StartContainer(id string) error {
+  ·····
+	err := d.client.ContainerStart(ctx, id, dockertypes.ContainerStartOptions{})
+	······
+}
+```
+
+再到 `github.com/docker/docker/client/container_start.go`
+
+```go
+func (cli *Client) ContainerStart(ctx context.Context, containerID string, options types.ContainerStartOptions) error {
+	······
+	resp, err := cli.post(ctx, "/containers/"+containerID+"/start", query, nil, nil)
+	ensureReaderClosed(resp)
+	return err
+}
+```
+
+到这里，kubelet的调用就发到了Docker 的 Daemon了，整个调用结束
+

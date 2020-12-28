@@ -176,3 +176,7 @@ printf "    NUM  PID\t\tCOMMAND\n" && ps -eLf | awk '{$1=null;$3=null;$4=null;$5
 - 第一列表示线程数
 - 第二列表示进程 PID
 - 第三列是进程启动命令
+
+# Dig命令
+
+使用 `dnsutils` 镜像，或者自己做一个

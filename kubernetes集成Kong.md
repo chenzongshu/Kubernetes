@@ -50,7 +50,7 @@ tar -zxvf kong-1.12.0.tgz
 
 修改values.yaml文件之前，看看里面参数的含义，官方chart 的github地址是：https://github.com/Kong/charts/blob/main/charts/kong/README.md
 
-**默认chart是DB-less模式**
+**默认chart是DB-less模式，安装到了default空间**
 
 
 

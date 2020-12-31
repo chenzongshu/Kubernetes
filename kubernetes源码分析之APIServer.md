@@ -1,3 +1,5 @@
+> 基于1.19版本
+
 # 组件
 
 kube-apiserver 共由 3 个组件构成（Aggregator、KubeAPIServer、APIExtensionServer），这些组件依次通过 Delegation 处理请求：
@@ -25,7 +27,13 @@ kubernetes 中的一些附加组件，比如 metrics-server 就是通过 Aggrega
 在 kube-apiserver 中需要增加以下配置来开启 API Aggregation：
 
 ```
---proxy-client-cert-file=/etc/kubernetes/certs/proxy.crt--proxy-client-key-file=/etc/kubernetes/certs/proxy.key--requestheader-client-ca-file=/etc/kubernetes/certs/proxy-ca.crt--requestheader-allowed-names=aggregator--requestheader-extra-headers-prefix=X-Remote-Extra---requestheader-group-headers=X-Remote-Group--requestheader-username-headers=X-Remote-User
+--proxy-client-cert-file=/etc/kubernetes/certs/proxy.crt
+--proxy-client-key-file=/etc/kubernetes/certs/proxy.key
+--requestheader-client-ca-file=/etc/kubernetes/certs/proxy-ca.crt
+--requestheader-allowed-names=aggregator
+--requestheader-extra-headers-prefix=X-Remote-Extra-
+--requestheader-group-headers=X-Remote-Group
+--requestheader-username-headers=X-Remote-User
 ```
 
 ## KubeAPIServer

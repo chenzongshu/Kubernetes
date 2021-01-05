@@ -289,3 +289,43 @@ Commercial support is available at
 </html>
 ```
 
+## 带数据库安装
+
+修改values
+
+```yaml
+file:// values.yaml
+# 按照下面的注释，使用postgresql的chart来创建
+env:
+  database: "postgres"  # 只有三个值：postgres, cassandra, and off
+
+postgresql:
+  enabled: true
+  postgresqlUsername: kong
+  postgresqlDatabase: kong
+  service:
+    port: 5432
+```
+
+如果报 `‘/bitnami/postgresql/data’: Permission denied`错误，需要修改下面的文件
+
+```yaml
+file://charts/postgresql/values.yaml
+
+volumePermissions:
+  enabled: true  #如果PV是hostpath，这里修改为true，不然pg的数据库目录创建不了
+    ······
+    pullPolicy: IfNotPresent  #默认值是Always
+```
+
+在阿里云上使用阿里云自带的CSI storageclass，分配一个5G的SSD云盘
+
+```yaml
+file://charts/postgresql/values.yaml
+persistence：
+  ······
+  storageClass: alicloud-disk-ssd
+  ······
+  size: 5Gi
+```
+

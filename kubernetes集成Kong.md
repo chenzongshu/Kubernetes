@@ -122,6 +122,7 @@ tar -zxvf kong-1.12.0.tgz
 
 - `Kong Enterprise`是kong的企业版，默认是false，安装需要单独打开
 - `Kong Manager`是基于视觉浏览器的工具，用于监视和管理Kong Enterprise，企业版才有
+- kong的参数配置，比如说连接PG等参数是通过环境变量来指明的，这个和
 
 ### 修改
 

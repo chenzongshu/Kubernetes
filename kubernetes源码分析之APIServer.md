@@ -28,9 +28,11 @@ kube-apiserver 共由 3 个组件构成（Aggregator、KubeAPIServer、APIExtens
                          └──────────────────────────────────┘                     
 ```
 
-- **AggregatorSever**：暴露的功能类似于一个七层负载均衡，将来自用户的请求拦截转发给其他服务器，并且负责整个 APIServer 的 Discovery 功能；
-- **KubeAPIServer** ：负责对请求的一些通用处理，认证、鉴权等，以及处理各个内建资源的 REST 服务；
+- **AggregatorSever**：暴露的功能类似于一个七层负载均衡，将来自用户的请求拦截转发给其他服务器，并且负责整个 APIServer 的 Discovery 功能；Aggregator服务提供了AA （APIAggregator）聚合服务，开发者可通过AA对Kubernetes聚合服务进行扩展，例如，metrics-server是Kubernetes系统集群的核心监控数据的聚合器，它是AggregatorServer服务的扩展实现。API聚合服务通过APIAggregator对象进行管理，并通过aggregatorscheme.Scheme资源注册表管理AA相关资源。
+- **KubeAPIServer** ：API核心服务。该服务提供了Kubernetes内置核心资源服务，不允许开发者随意更改相关资源，例如，Pod、Service等内置核心资源会由Kubernetes官方维护。API核心服务通过Master对象进行管理，并通过legacyscheme.Scheme资源注册表管理Master相关资源
 - **APIExtensionServer**：主要处理 CustomResourceDefinition（CRD）和 CustomResource（CR）的 REST 请求，也是 Delegation 的最后一环，如果对应 CR 不能被处理的话则会返回 404。
+
+APIExtensionsServer扩展服务和AggregatorServer聚合服务都是可以在不修改Kubernetes核心代码的前提下扩展Kubernetes API的方式。只有KubeAPIServer核心服务是Kubernetes系统运行的基础，不建议随意修改它
 
 ## Aggregator
 
@@ -92,11 +94,35 @@ kube-apiserver组件启动后的第一件事情是将Kubernetes所支持的资�
 
 资源的注册过程并不是通过函数调用触发的，而是通过Go语言的导入（import）和初始化（init）机制触发的
 
-kube-apiserver导入了legacyscheme和master包。kube-apiserver资源注册分为两步：
+以KubeAPIServer（API核心服务）为例，kube-apiserver导入了legacyscheme和master包。
+
+```
+file:// cmd/kube-apiserver/app/server.go
+import (
+	"k8s.io/kubernetes/pkg/api/legacyscheme"
+	"k8s.io/kubernetes/pkg/master"
+······
+```
+
+kube-apiserver资源注册分为两步：
 
 第1步，初始化Scheme资源注册表(`pkg/api/legacyscheme/scheme.go`)；
 
 第2步，注册Kubernetes所支持的资源。kube-apiserver启动时导入了master包，master包中的import_known_versions.go文件调用了Kubernetes资源下的install包，通过导入包的机制触发初始化函数`pkg/master/import_known_versions.go`
+
+```go
+import (
+	// These imports are the API groups the API server will support.
+	_ "k8s.io/kubernetes/pkg/apis/admission/install"
+	_ "k8s.io/kubernetes/pkg/apis/admissionregistration/install"
+	_ "k8s.io/kubernetes/pkg/apis/apps/install"
+······
+	_ "k8s.io/kubernetes/pkg/apis/networking/install"
+	_ "k8s.io/kubernetes/pkg/apis/node/install"
+)
+```
+
+每个Kubernetes内部版本资源都定义install包，用于在kube-apiserver启动时注册资源
 
 ## CreateServerChain
 
@@ -189,6 +215,8 @@ func CreateKubeAPIServerConfig(
 
 #### buildGenericConfig
 
+该函数创建APIServer的通用配置，该配置是kube-apiserver不同模块实例化所需的配置
+
 ```go
 func buildGenericConfig(
     s *options.ServerRunOptions,
@@ -213,7 +241,7 @@ func buildGenericConfig(
     storageFactoryConfig.ApiResourceConfig = genericConfig.MergedResourceConfig
     completedStorageFactoryConfig, err := storageFactoryConfig.Complete(s.Etcd)
 
-    // 初始化 storageFactory
+    // 实例化了storageFactoryConfig对象，该对象定义了kube-apiserver与Etcd的交互方式，例如Etcd认证、Etcd地址、存储前缀等。另外，该对象也定义了资源存储方式，例如资源信息、资源编码类型、资源状态等
     storageFactory, lastErr = completedStorageFactoryConfig.New()
 
     // 2、初始化 RESTOptionsGetter，后期根据其获取操作 Etcd 的句柄，同时添加 etcd 的健康检查方法
@@ -262,6 +290,7 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
         GenericAPIServer: genericServer,
     }
     // 2、初始化 APIGroup Info，APIGroup 指该 server 需要暴露的 API
+    // APIGroupInfo对象用于描述资源组信息，其中该对象的VersionedResourcesStorageMap字段用于存储资源与资源存储对象的对应关系，其表现形式为map[string]map[string]rest.Storage（即<资源版本>/<资源>/<资源存储对象>），例如CustomResourceDefinitions资源与资源存储对象的映射关系是v1beta1/customresourcedefinitions/customResourceDefintionStorage
     apiResourceConfig := c.GenericConfig.MergedResourceConfig
     apiGroupInfo := genericapiserver.NewDefaultAPIGroupInfo(apiextensions.GroupName, Scheme, metav1.ParameterCodec, Codecs)
     if apiResourceConfig.VersionEnabled(v1beta1.SchemeGroupVersion) {
@@ -327,10 +356,15 @@ func (c completedConfig) New(delegationTarget genericapiserver.DelegationTarget)
 
 其中最核心方法是 `s.GenericAPIServer.InstallAPIGroup`，也就是 API 的注册过程，三种 server 中 API 的注册过程都是其核心。
 
-- 1、首先调用 `c.GenericConfig.New` 按照`go-restful`的模式初始化 Container，在 `c.GenericConfig.New` 中会调用 `NewAPIServerHandler` 初始化 handler，APIServerHandler 包含了 API Server 使用的多种http.Handler 类型，包括 `go-restful` 以及 `non-go-restful`，以及在以上两者之间选择的 Director 对象，`go-restful` 用于处理已经注册的 handler，`non-go-restful` 用来处理不存在的 handler，API URI 处理的选择过程为：`FullHandlerChain-> Director ->{GoRestfulContainer， NonGoRestfulMux}`。在 `c.GenericConfig.New` 中还会调用 `installAPI`来添加包括 `/`、`/debug/*`、`/metrics`、`/version` 等路由信息。三种 server 在初始化时首先都会调用 `c.GenericConfig.New` 来初始化一个 genericServer，然后进行 API 的注册；
-- 2、调用 `s.GenericAPIServer.InstallAPIGroup` 在路由中注册 API Resources，此方法的调用链非常深，主要是为了将需要暴露的 API Resource 注册到 server 中，以便能通过 http 接口进行 resource 的 REST 操作，其他几种 server 在初始化时也都会执行对应的 `InstallAPI`；
-- 3、初始化 server 中需要使用的 controller，主要有 `openapiController`、`crdController`、`namingController`、`establishingController`、`nonStructuralSchemaController`、`apiApprovalController`、`finalizingControlle`r；
-- 4、将需要启动的 controller 以及 informer 添加到 PostStartHook 中；
+- 首先调用 `c.GenericConfig.New` 按照`go-restful`的模式初始化 Container，在 `c.GenericConfig.New` 中会调用 `NewAPIServerHandler` 初始化 handler，APIServerHandler 包含了 API Server 使用的多种http.Handler 类型，包括 `go-restful` 以及 `non-go-restful`，以及在以上两者之间选择的 Director 对象，`go-restful` 用于处理已经注册的 handler，`non-go-restful` 用来处理不存在的 handler，API URI 处理的选择过程为：`FullHandlerChain-> Director ->{GoRestfulContainer， NonGoRestfulMux}`。在 `c.GenericConfig.New` 中还会调用 `installAPI`来添加包括 `/`、`/debug/*`、`/metrics`、`/version` 等路由信息。三种 server 在初始化时首先都会调用 `c.GenericConfig.New` 来初始化一个 genericServer，然后进行 API 的注册；
+- 在实例化APIGroupInfo对象后，完成其资源与资源存储对象的映射，APIExtensionsServer会先判断apiextensions.k8s.io/v1beta1资源组/资源版本是否已启用，如果其已启用，则将该资源组、资源版本下的资源与资源存储对象进行映射并存储至APIGroupInfo对象的VersionedResourcesStorageMap字段中。每个资源（包括子资源）都通过类似于NewREST的函数创建资源存储对象（即RESTStorage）。kube-apiserver将RESTStorage封装成HTTP Handler函数，资源存储对象以RESTful的方式运行，一个RESTStorage对象负责一个资源的增、删、改、查操作。当操作CustomResourceDefinitions资源数据时，通过对应的RESTStorage资源存储对象与genericregistry.Store进行交互。
+- 调用 `s.GenericAPIServer.InstallAPIGroup` 在路由中注册 API Resources，此方法非常重要，调用链非常深，主要是为了将需要暴露的 API Resource 注册到 server 中，以便能通过 http 接口进行 resource 的 REST 操作，其他几种 server 在初始化时也都会执行对应的 `InstallAPI`；
+  - 遍历APIGroupInfo，将<资源组>/<资源版本>/<资源名称>映射到HTTP PATH请求路径
+  - 通过InstallREST函数将资源存储对象作为资源的Handlers方法
+  - 最后使用go-restful的ws.Route将定义好的请求路径和Handlers方法添加路由到go-restful中
+  - 整个过程为InstallAPIGroup→s.installAPIResources→InstallREST
+- 初始化 server 中需要使用的 controller，主要有 `openapiController`、`crdController`、`namingController`、`establishingController`、`nonStructuralSchemaController`、`apiApprovalController`、`finalizingController`；
+- 将需要启动的 controller 以及 informer 添加到 PostStartHook 中；
 
 ### CreateKubeAPIServer
 

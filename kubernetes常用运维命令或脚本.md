@@ -18,7 +18,7 @@ echo finish
 
 # 一次load所有镜像
 
-```
+```bash
 [root@k8s-m1 images]# cat image-load.sh 
 #!/bin/bash
 
@@ -34,7 +34,7 @@ load-load.sh tar
 
 # 一次所有镜像打tag并上传到某个仓库
 
-```
+```bash
 #!/bin/bash
 
 readonly new_repo=registry.cn-shenzhen.aliyuncs.com/kubespray_pub
@@ -46,6 +46,22 @@ for image in $(docker images --format '{{.Repository}}:{{.Tag}}'); do
 	docker tag ${image} ${new_img}
 	docker push ${new_img}
 done
+```
+
+# 日志查询
+
+```bash
+# 返回pod ruby中已经停止的容器web-1的日志快照
+$ kubectl logs -p -c ruby web-1
+
+# 持续输出pod ruby中的容器web-1的日志
+$ kubectl logs -f -c ruby web-1
+
+# 仅输出pod nginx中最近的20条日志
+$ kubectl logs --tail=20 nginx
+
+# 输出pod nginx中最近一小时内产生的所有日志
+$ kubectl logs --since=1h nginx
 ```
 
 # 批量删除镜像

@@ -1,5 +1,30 @@
 > 基于1.19版本
 
+# 框架
+
+kube-apiserver 基于第三方轻量级框架go-restful ， 其核心数据和流程是 Container -> WebService -> Route
+
+- Route：表示一条请求路由记录，即Resource 的URL Path（URI），go-restful 内置的 RouteSelector（请求路由分发器）根据 Route 将客户端发出的 HTTP 请求路由到相应的 Handler 进行处理
+- WebService：一个 WebService 由若干个 Routes 组成，并且 WebService 内的 Routes 拥有同一个 RootPath、输入输出格式、基本一致的请求数据类型等等一系列的通用属性。通常的，我们会根据需要将一组相关性非常强的 API 封装成为一个 WebServiice，继而将 Web Application 所拥有的全部 APIs 划分若干个 Group。
+- Container：表示一个 Web Server（服务器），由多个 WebServices 组成，此外还包含了若干个 Filters（过滤器）、一个 http.ServeMux 多路复用器以及一个 dispatch。go-restful 如何在从 Container 开始将路由分发给各个 WebService，再由 WebService 分发给具体的 Handler 函数，这些都在 dispatch 中实现。
+
+```
+                                          ┌────────────────┐       ┌──────────────────────────────┐ 
+                                        ┌▶│Route Get /books│──────▶│Handler Func(request,response)│ 
+                       ┌──────────────┐ │ └────────────────┘       └──────────────────────────────┘ 
+                       │  WebService  │ │ ┌─────────────────┐      ┌──────────────────────────────┐ 
+                    ┌─▶│    (Books)   │─┼▶│Route Post /books│─────▶│Handler Func(request,response)│ 
+                    │  └──────────────┘ │ └─────────────────┘      └──────────────────────────────┘ 
+┌─────────────────┐ │                   │ ┌──────────────────────┐  ┌──────────────────────────────┐
+│    Container    │ │                   └▶│Route Delete /books:id│─▶│Handler Func(request,response)│
+│(Listen IP:Port) │─┤                     └──────────────────────┘  └──────────────────────────────┘
+└─────────────────┘ │                                                                               
+                    │  ┌──────────────┐   ┌────────────────┐        ┌──────────────────────────────┐
+                    │  │  WebService  │ ┌▶│Route Get /user │───────▶│Handler Func(request,response)│
+                    └─▶│    (User)    │─┘ └────────────────┘        └──────────────────────────────┘
+                       └──────────────┘                                                             
+```
+
 # 组件
 
 kube-apiserver 共由 3 个组件构成（Aggregator、KubeAPIServer、APIExtensionServer），这些组件依次通过 Delegation 处理请求：

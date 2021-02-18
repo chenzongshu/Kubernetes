@@ -209,9 +209,34 @@ Local Persistent Volume是不是等同于HostPath加上NodeAffinity吗？
 
 
 
-# 强制删除Pod
+# 镜像下载Always策略
 
+其他几种策略很好理解，镜像下载策略选择为Always的时候，实际上并不是无脑的重新下载，而是会下下载镜像的，如果一样，还是不下载新镜像每层。
+
+> 官网说明： 底层镜像驱动程序的缓存语义能够使即便 `imagePullPolicy: Always` 的配置也很高效。 例如，对于 Docker，如果镜像已经存在，则拉取尝试很快，因为镜像层都被缓存并且不需要下载。
+
+> 镜像下载过程： 先获取token，然后下载镜像的manifest，根据manifest里面的信息来比对本地有没有，本地没有就去发http请求下载对应的layer
+
+
+
+# Pod预设值PodPreset 
+
+自动给Pod加上其他信息，类似Pod模板，在1.11版本以后出现
+
+```yaml
+apiVersion: settings.k8s.io/v1alpha1 kind: PodPreset
+metadata:
+name: allow-database spec:
+  selector:
+    matchLabels:
+      role: frontend
+  env:
+- name: DB_PORT value: "6379"
+volumeMounts:
+- mountPath: /cache
+name: cache-volume volumes:
+- name: cache-volume emptyDir: {}
 ```
-kubectl delete pods <pod> --grace-period=0 --force
-```
+
+这些追加的定义，只会作用于 selector 所定义的、带有“role: frontend”标签的 Pod 对象
 

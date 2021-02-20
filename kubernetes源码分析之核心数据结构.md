@@ -1,5 +1,16 @@
 # 资源
 
+看一个常见的yaml模板
+
+```yaml
+# CronJob就是这个 API 对象的资源类型（Resource）
+# batch就是它的组（Group）
+# v2alpha1 就是它的版本（Version）
+apiVersion: batch/v2alpha1 
+kind: CronJob
+...
+```
+
 Kubernetes将资源再次分组和版本化，形成Group（资源组）、Version（资源版本）、Resource（资源）、Kind（资源种类）
 
 - **Group** ：被称为资源组，在Kubernetes API Server中也可称其为APIGroup。

@@ -1,3 +1,9 @@
+# 通过Docker镜像部署实验NFS服务器
+
+https://github.com/ehough/docker-nfs-server
+
+
+
 # nfs 服务端安装和配置
 
 nfs 服务端所在主机IP为: 10.110.101.106。可根据自己的实际情况修改。

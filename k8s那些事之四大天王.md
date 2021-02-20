@@ -1,5 +1,7 @@
 > 本文不想对官方文档内容做过多的搬运，主要介绍一些自己的理解的总结和容易忽略的地方
 
+所谓四大天王指的就是Kubernetes的四个顶级资源模型deployment，statefset，daemonset和job/cronjob。也是大家了解的最多的概念。
+
 # Deployment
 
 Deployment无状态应用, 作为Kubernetes应用的最早, 最广泛的资源类型, 为Kubernetes闻名天下立下了汗马功劳. 容器最早的推广就是无状态应用。

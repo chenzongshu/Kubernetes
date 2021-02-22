@@ -181,7 +181,7 @@ Nginx Ingress Controller就是一个Kubernetes Controller + Nginx + Lua的组合
 
 那怎么数据流是怎么样的呢?
 
-Pod内的resolv.conf文件指定了DNS相关信息
+Pod内的resolv.conf文件指定了DNS相关信息，根据域名去找服务的IP
 
 ```
 nameserver 169.254.25.10
@@ -190,7 +190,55 @@ options ndots:5
 ```
 
 - 其中169.254.25.10就是CoreDNS Service的ClusterIP.
-- 
 
+- 注意配置的`search`域和`ndots`值，ndots是什么意思呢？ 简单说，如果你的域名请求参数中，`点的个数`比配置的`ndots`小，则会按照配置的`search`内容，依次添加相应的后缀直到获取到域名解析后的地址。如果通过添加了search之后还是找不到域名，则会按照一开始请求的域名进行解析。
 
+  >  举个例子，你在Pod访问一个服务serviceA，使用的服务名serviceA，ndots数量为0，小于5，所以实际上自动给你加上search域的第一个域名变成 serviceA.default.svc.cluster.local，如果没找到继续往下，直到search域里面的找完，然后再使用本来的域名serviceA来解析
+  
+  所以实际中常常调整ndots的值，减少为2，来减少DNS查询次数，优化效率，当然Kubernetes设置ndots默认值为5也是有它的道理的，后面我们来摆一摆
+
+如果是外部域名，又是怎么来解析出来的呢？
+
+首先要明确，外部域名也需要按照resolve.conf的搜索域来走一遍DNS请求，然后最后CoreDNS里面还是找不到该域名对应的解析，这个时候，CoreDNS就会根据自身的配置，把请求转向它自己配置的forward的DNS服务器中，如果CoreDNS是容器化部署的，这个配置在configmap中：
+
+```yaml
+[root@node000006 ~]# kubectl -n kube-system get cm coredns -o yaml
+apiVersion: v1
+data:
+  Corefile: |
+    .:53 {
+        errors
+        health {
+            lameduck 5s
+        }
+        ready
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+          pods insecure
+          fallthrough in-addr.arpa ip6.arpa
+        }
+        prometheus :9153
+        forward . /etc/resolv.conf {
+          prefer_udp
+        }
+        cache 30
+        loop
+        reload
+        loadbalance
+    }
+kind: ConfigMap
+metadata:
+```
+
+forward插件的的默认配置是转发coredns节点的resolv.conf，即使用了宿主机的DNS配置
+
+Kubernetes 默认配置下 ndots 的值是 5，其原因官方在 [issue 33554](https://github.com/kubernetes/kubernetes/issues/33554#issuecomment-266251056) 中做了解释：
+
+- 有些人需要配置集群 `$zone` 的后缀以支持多集群，所以一个完整的 Service 的域名为 `$service.$namespace.svc.$zone`，为了不在代码中配置完整的域名，就需要设置 ndots 和 search。
+- 同 namespace 下的 Service 的请求是最常用的，因此需要解析 `$service`，此时需 ndots >= 1，且 search 列表中第一个应为 `$namespace.D.$zone`。
+- 跨 namespace 的 Service 也经常会被请求，因此需要解析 `$service.$namespace`，此时需 ndots >= 2，且 search 列表中第二个应为 `svc.$zone`。
+- 为了解析 `$service.$namespace.svc`，此时需 ndots >= 3，且 search 列表包含 `$zone`。
+- 在 Kubernetes 1.4 之前，StatefulSet 为PetSet，当每个 Pet 被创建时，它会获得一个匹配的 DNS 子域，域格式为 `$petname.$service.$namespace.svc.$zone`，此时需 ndots >= 4。
+- Kubernetes 还支持 SRV 记录，因此 `_$port.$proto.$service.$namespace.svc.$zone` 需要可以解析，此时 ndots = 5。
+
+这就是为什么 ndots 为 5。总结来说是为了支持更复杂的 Pod 内的域名解析，但通常情况下只会用到同 namespace 下的 Service（形如 `service-b`）和跨 namespace 下 Service（形如 `service-c.sre`）的访问，因此 ndots 的默认值设为 2 便可满足业务需求并避免大量无效的解析请求。
 

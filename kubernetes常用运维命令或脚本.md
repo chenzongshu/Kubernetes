@@ -567,3 +567,16 @@ Kubectl 日志输出详细程度是通过 `-v` 或者 `--v` 来控制的，参�
 | `--v=7`  | 显示 HTTP 请求头。                                           |
 | `--v=8`  | 显示 HTTP 请求内容。                                         |
 | `--v=9`  | 显示 HTTP 请求内容而且不截断内容。                           |
+
+# 给Service配置port-forward代理
+
+对于调试用的service，可以暂时启动一个调试port-forward来开启外部访问，比如grafana就可以这样
+
+```
+[root@node1 ~]# kubectl -n monitoring get svc
+NAME                    TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)                      AGE
+grafana                 ClusterIP   10.233.38.141   <none>        3000/TCP                     32d
+
+kubectl port-forward --address 0.0.0.0 svc/grafana -n monitoring 3000:3000
+```
+

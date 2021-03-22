@@ -111,7 +111,7 @@ Cilium自己提供了一套验证服务的部署，但是至少需要两个节�
 可以单独创建一个ns来部署
 
 ```bash
-kubectl create ns cilium-testv
+kubectl create ns cilium-test
 
 kubectl apply -n cilium-test -f https://raw.githubusercontent.com/cilium/cilium/v1.9/examples/kubernetes/connectivity-check/connectivity-check.yaml
 ```
@@ -136,6 +136,8 @@ pod-to-b-multi-node-nodeport-7ffc76db7c-rrw82            1/1     Running   0    
 pod-to-external-1111-d56f47579-d79dz                     1/1     Running   0          66s
 pod-to-external-fqdn-allow-google-cnp-78986f4bcf-btjn7   1/1     Running   0          66s
 ```
+
+> 最后一个的Readiness会去curl google，国内有困难
 
 # Hubble
 
@@ -212,7 +214,7 @@ Cilium Agent作为daemonset的特权形式运行在每个节点上，功能：
 
 - cilium_host作为主机上该子网的一个网关，并且在node上为其自动分配了ip地址10.0.0.148/32，
 
-- cilium_net和cilium_host作为一对veth而创建
+- 初始化的时候创建一个" cilium_net <-> cilium_host " 的veth Pair
 
 - 还有一个lxc_health
 
@@ -255,7 +257,7 @@ ip a
     inet6 fe80::543a:84ff:fe36:263/64 scope link
 ```
 
-容器内部可以看到对应的veth pair
+容器内部可以看到对应的veth pair， 并且设置了cilium_host作为其网关
 
 ```
 [root@k8s-w1 ~]# kubectl exec -it centos-w-6976fb747d-8jddt ip a
@@ -264,4 +266,10 @@ ip a
 ······
 ```
 
-由此知道，同节点的Pod通信可以经过Veth Pair，由
+由此知道，**Pod生成的流量的下一个L3跳是cilium_host，而Pod生成的流量的下一个L2跳是veth对的主机端。**
+
+而lxcaa7d281d4068之间通过ARP来获取对端veth pair的MAC
+
+### 跨节点
+
+数据到了lxcaa7d281d4068之后转到到了节点的cilium_vxlan进行经典的Vxlan封包解包，发到对端的eth0

@@ -245,6 +245,24 @@ centos-w-6976fb747d-8jddt   1/1     Running   0          3s    10.0.1.206   k8s-
 centos-w-6976fb747d-p75hv   1/1     Running   0          3s    10.0.1.58    k8s-w1   <none>           <none>
 ```
 
+查看cilium的bpf endpoint
+
+```
+root@k8s-m1:/home/cilium# cilium bpf endpoint list
+IP ADDRESS         LOCAL ENDPOINT INFO
+10.0.0.161:0       id=2491  flags=0x0000 ifindex=72  mac=9E:28:FC:5F:4D:D0 nodemac=EE:B9:46:37:A5:80
+10.0.0.207:0       id=2970  flags=0x0000 ifindex=28  mac=CA:03:69:75:D2:23 nodemac=F6:5A:B6:5D:ED:4D
+10.0.0.53:0        id=1157  flags=0x0000 ifindex=80  mac=DE:EF:43:CC:FD:79 nodemac=8A:C6:D9:AE:6B:E1
+192.168.51.200:0   (localhost)
+10.0.0.93:0        id=2492  flags=0x0000 ifindex=76  mac=DE:DF:9B:D6:19:F4 nodemac=DE:4F:48:14:00:D7
+10.0.0.223:0       id=192   flags=0x0000 ifindex=78  mac=AE:DE:65:D7:5D:AD nodemac=C6:48:B6:56:55:31
+10.0.0.31:0        id=3836  flags=0x0000 ifindex=82  mac=F2:E6:FB:8D:9E:C9 nodemac=06:AA:4A:AA:C3:AB
+10.0.0.148:0       (localhost)
+10.0.0.167:0       id=422   flags=0x0000 ifindex=74  mac=12:3E:08:66:E2:8B nodemac=CE:2A:DB:EC:70:6E
+```
+
+里面可以看到创建Pod的MAC地址和IP，作为endpoint
+
 ### 同节点
 
 可以看到没启动一个Pod，就会在宿主机上启动一个类似
@@ -268,8 +286,8 @@ ip a
 
 由此知道，**Pod生成的流量的下一个L3跳是cilium_host，而Pod生成的流量的下一个L2跳是veth对的主机端。**
 
-而lxcaa7d281d4068之间通过ARP来获取对端veth pair的MAC
+路由方式与传统的通过 Linux bridge 这样的二层设备转发不一样，cilium 在每个容器相关联的虚拟网卡上都附加了 bpf 程序，通过连接到 TC ( traffic control ) 入口钩子的 bpf 程序将所有网络流量路由到主机端虚拟设备上，由此 cilium 便可以监视和执行有关进出节点的所有流量的策略，例如 pod 内的 networkPolicy 、L7 policy、加密等规则。
 
 ### 跨节点
 
-数据到了lxcaa7d281d4068之后转到到了节点的cilium_vxlan进行经典的Vxlan封包解包，发到对端的eth0
+如果PodA要访问跨节点的PodB，bpf 程序会查询 tunnel 规则并将流量发送给 cilium_vxlan，cilium_vxlan VTEP 设备对流量包进行封装转发到另一个节点上。

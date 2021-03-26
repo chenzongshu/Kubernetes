@@ -23,10 +23,14 @@ Kubernetes将资源再次分组和版本化，形成Group（资源组）、Versi
 
 Kubernetes系统支持多个Group，每个Group支持多个Version，每个Version支持多个Resource，其中部分资源同时会拥有自己的子资源（即SubResource）。例如，Deployment资源拥有Status子资源。
 
+> resources（资源） 只是 API 中的一个 Kind 的使用方式。通常情况下，Kind 和 resources 之间有一个一对一的映射。 例如，`pods` 资源对应于 `Pod` 种类。但是有时，同一类型可能由多个资源返回。例如，`Scale` Kind 是由所有 `scale` 子资源返回的，如 `deployments/scale` 或 `replicasets/scale`。这就是允许 Kubernetes HorizontalPodAutoscaler(HPA) 与不同资源交互的原因。然而，使用 CRD，每个 Kind 都将对应一个 resources。
+
 资源组、资源版本、资源、子资源的完整表现形式为`<group>/<version>/<resource>/<subresource>`。以常用的Deployment资源为例，`apps/v1/deployments/status`
 
 > 可以通过 Group、Version、Resource、Kind 任意组合的数据结构来明确标识一个资源
 > 常见的资源结构如下： GVR, GV, GR, GVK, GV, GK, GVS。
+
+
 
 ## 版本
 

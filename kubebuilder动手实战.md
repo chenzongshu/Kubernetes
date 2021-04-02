@@ -902,6 +902,10 @@ func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 ## main.go
 
+一般情况下不需要修改，kubebuilder 已经自动添加了一个阻塞调用我们的 CornJob 控制器的 `SetupWithManager` 方法。
+
+
+
 
 
 # 安装&卸载

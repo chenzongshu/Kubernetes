@@ -212,7 +212,7 @@ cfssl print-defaults csr > ca-csr.json
 
 vim ca-csr.json
 {
-    "CN": "stg-kubernetes-dashboard.myhll.cn",
+    "CN": "stg-kubernetes-dashboard.czs.cn",
     "key": {
         "algo": "ecdsa",
         "size": 256
@@ -280,15 +280,15 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: stg-kubernetes-dashboard.myhll.cn
+  name: stg-kubernetes-dashboard.czs.cn
   namespace: kubernetes-dashboard
 spec:
   dnsNames:
-  - stg-kubernetes-dashboard.myhll.cn
+  - stg-kubernetes-dashboard.czs.cn
   issuerRef:
     kind: ClusterIssuer
     name: ca-issuer
-  secretName: stg-kubernetes-dashboard.myhll.cn-tls
+  secretName: stg-kubernetes-dashboard.czs.cn-tls
 ```
 
 最后创建Ingress规则
@@ -304,10 +304,10 @@ metadata:
 spec:
   tls:
   - hosts:
-    - stg-kubernetes-dashboard.myhll.cn
-    secretName: stg-kubernetes-dashboard.myhll.cn-tls
+    - stg-kubernetes-dashboard.czs.cn
+    secretName: stg-kubernetes-dashboard.czs.cn-tls
   rules:
-  - host: stg-kubernetes-dashboard.myhll.cn
+  - host: stg-kubernetes-dashboard.czs.cn
     http:
       paths:
       - path: /

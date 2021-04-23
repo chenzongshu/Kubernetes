@@ -240,3 +240,16 @@ name: cache-volume volumes:
 
 这些追加的定义，只会作用于 selector 所定义的、带有“role: frontend”标签的 Pod 对象
 
+# Job/Cronjob
+
+- Pod的`restartPolicy` 字段只能定义为 `Never` 或 `OnFailure`
+- 如果Job失败，`Job Controller`会去重新创建Pod，这个次数由Job 对象的 `spec.backoffLimit` 字段定义，默认为6，重新创建的间隔时间是呈指数增加的，即下一次重新创建 Pod 的动作会分别发生在 10 s、20 s、40 s …后
+- 如果Job一直运行不结束，有一个 `spec.activeDeadlineSeconds` 字段可以设置最长运行时间
+- Job并行控制由2个参数设置： `spec.parallelism`定义同时能运行多少Pod；`spec.completions`定义Job至少要完成多少Pod才算结束；这两个参数默认值都为1
+- Job启动Pod的数量由 `Pod 数目 = 最终需要的 Pod 数目 - 实际在 Running 状态 Pod 数目 - 已经成功退出的 Pod 数目` 计算，再加上`parallelism`参数修正
+- cronjob 的 `concurrencyPolicy` 字段控制Job间并行关系，只有三个值：
+  - Allow：是默认值，这意味着这些 Job 可以同时存在
+  - Forbid：这意味着不会创建新的 Pod，该创建周期被跳过
+  - Replace：新产生的 Job 会替换旧的、没有执行完的 Job
+- cronjob `.spec.successfulJobsHistoryLimit` 和 `.spec.failedJobsHistoryLimit`是可选的。 这两个字段指定应保留多少已完成和失败的任务。 默认设置为3和1。限制设置为0代表相应类型的任务完成后不会保留。
+

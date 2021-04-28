@@ -216,7 +216,7 @@ type LeaderElectionConfig struct {
 
 
 
-## 流程
+## 流程源码
 
 ```go
 func RunOrDie(ctx context.Context, lec LeaderElectionConfig) {
@@ -340,7 +340,7 @@ func (le *LeaderElector) tryAcquireOrRenew(ctx context.Context) bool {
 }
 ```
 
-
+然后，更新本身资源的时候，利用了k8s本身的乐观锁的特性，通过校验`ResourceVersion`的值来保证操作的原子性。
 
 # 附
 

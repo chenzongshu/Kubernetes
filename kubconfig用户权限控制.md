@@ -197,9 +197,66 @@ Error from server (Forbidden): pods is forbidden: User "system:serviceaccount:de
 
 
 
+# 多集群控制
 
+kubeconfig文件可以通过切换上下文的方式来切换操作的集群， 把两个集群的kubeconfig文件合成一个， 格式类似如下：
 
+```yaml
+apiVersion: v1
+clusters:
+- cluster:
+    insecure-skip-tls-verify: true
+    server: https://localhost:6443
+  name: docker-for-desktop-cluster
+- cluster:
+    certificate-authority-data: REDACTED
+    server: https://192.168.111.129:6443
+  name: kubernetes
+contexts:
+- context:
+    cluster: docker-for-desktop-cluster
+    user: docker-for-desktop
+  name: docker-for-desktop
+- context:
+    cluster: kubernetes
+    user: kubernetes-admin
+  name: kubernetes-admin@kubernetes
+current-context: kubernetes-admin@kubernetes
+kind: Config
+preferences: {}
+users:
+- name: docker-for-desktop
+  user:
+    client-certificate-data: REDACTED
+    client-key-data: REDACTED
+- name: kubernetes-admin
+  user:
+    client-certificate-data: REDACTED
+    client-key-data: REDACTED
+```
 
+其中`context`内容指定了`cluster`信息和`users`信息，里面使用的name要和定义的name一致
 
+然后查看有哪些context
 
+```
+kubectl config get-contexts
+```
+
+切换context
+
+```bash
+kubectl config use-context docker-for-desktop
+kubectl config use-context kubernetes-admin@kubernetes
+```
+
+也可以限制用户的namespace
+
+```yaml
+- context:
+    cluster: docker-for-desktop-cluster
+    user: docker-for-desktop
+    namespace: default
+  name: docker-for-desktop
+```
 

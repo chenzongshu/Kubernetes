@@ -330,3 +330,30 @@ persistence：
   size: 5Gi
 ```
 
+# 注解
+
+kong Ingress Controller支持下面的注解
+
+见官方文档：[Kubernetes Ingress Controller annotations](https://docs.konghq.com/kubernetes-ingress-controller/1.2.x/references/annotations/)
+
+`kubernetes.io/ingress.class` 是必需的， kong的话必须为kong
+
+# 规则配置
+
+Kong Ingress Controller定义了四个CRDs（CustomResourceDefinitions），基本上涵盖了原Admin API的各个方面。
+
+```
+[root@node000006 kubernetes-dashboard]# kubectl -n kong get crds
+NAME                                             CREATED AT
+kongclusterplugins.configuration.konghq.com      2021-04-30T09:22:19Z
+kongconsumers.configuration.konghq.com           2021-04-30T09:22:19Z
+kongingresses.configuration.konghq.com           2021-04-30T09:22:19Z
+kongplugins.configuration.konghq.com             2021-04-30T09:22:19Z
+tcpingresses.configuration.konghq.com            2021-04-30T09:22:19Z
+```
+
+- kongconsumers：Kong的用户，给不同的API用户提供不同的消费者身份。
+- kongcredentials：Kong用户的认证凭证。
+- kongingresses：定义代理行为规则，是对Ingress的补充配置。
+- kongplugins：插件的配置。
+  

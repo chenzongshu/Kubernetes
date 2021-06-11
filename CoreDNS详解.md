@@ -23,6 +23,52 @@ spec:
 
 整个 CoreDNS 服务都建立在一个使用 Go 编写的 HTTP/2 Web 服务器 [Caddy](https://github.com/mholt/caddy), 大多数功能都由插件提供
 
+**CoreDNS Pod数量最好和节点数是1：8的关系**
+
+## 基本规则
+
+在k8s中，CoreDNS会监听3类k8s资源的事件，分别是Service、StatefulSet和Pod这3类资源，并会为这三类资源自动创建（更新/删除）相应的域名记录，k8s中各服务间可以直接通过服务域名的方式进行通信。
+
+### Service
+
+CoreDNS会为Service创建3种域名记录：A或Cname、SRV、PTR
+
+**A/Cname的域名规则：**
+
+```
+<svc-name>.<namespace-name>.svc.<cluster-domain>
+```
+
+**SRV记录的域名命名规则：**
+
+```
+<port-name>.<port-protocol>.<svc-name>.<namespace-name>.svc.<cluster-domain>
+```
+
+**PTR记录的域名记录规则：**
+
+```
+<reverse-ip>.in-addr.arpa. ttl IN PTR <svc-FQDN>
+```
+
+### Statefulset
+
+对于StatefulSet，CoreDNS会为其包含的每一个Pod创建A记录，域名命名规则如下：
+
+```
+<pod-name>.<svc-name>.<namespace-name>.svc.<cluster-domain>
+```
+
+### Pod
+
+CoreDNS只会为一种Pod创建域名记录，记录类型为A：Pod配置了hostName和subdomain，并且该Pod的subdomain与该Pod关联的Service名称相同时，域名命名规则与StatefulSet的Pod类似。
+
+```
+<host-name>.<svc-name>.<namespace-name>.svc.<cluster-domain>
+```
+
+
+
 ## corefile基本配置
 
 另一个 CoreDNS 的特点就是它能够通过简单易懂的 DSL 定义 DNS 服务，在 Corefile 中就可以组合多个插件对外提供服务, corefile由configmap提供, 在kube-system命名空间下面
@@ -156,6 +202,49 @@ dnsConfig:
 ```
 
 4. 使用nodelocaldns，本地缓存
+
+## CoreDNS高级用法
+
+常用的默认插件
+
+| **errors**                 | 错误信息到标准输出。                                         |
+| -------------------------- | ------------------------------------------------------------ |
+| **health**                 | CoreDNS自身健康状态报告，默认监听端口8080，一般用来做健康检查。您可以通过`http://localhost:8080/health`获取健康状态。 |
+| **ready**                  | CoreDNS插件状态报告，默认监听端口8181，一般用来做可读性检查。可以通过`http://localhost:8181/ready`获取可读状态。当所有插件都运行后，ready状态为200。 |
+| **kubernetes**             | CoreDNS kubernetes插件，提供集群内服务解析能力。             |
+| **prometheus**             | CoreDNS自身metrics数据接口。可以通过`http://localhost:9153/metrics`获取prometheus格式的监控数据。 |
+| **forward**（或**proxy**） | 将域名查询请求转到预定义的DNS服务器。默认配置中，当域名不在kubernetes域时，将请求转发到预定义的解析器（/etc/resolv.conf）中。默认使用宿主机的/etc/resolv.conf配置。 |
+| **cache**                  | DNS缓存。                                                    |
+| **loop**                   | 环路检测，如果检测到环路，则停止CoreDNS。                    |
+| **reload**                 | 允许自动重新加载已更改的Corefile。编辑ConfigMap配置后，请等待两分钟以使更改生效。 |
+| **loadbalance**            | 循环DNS负载均衡器，可以在答案中随机A、AAAA、MX记录的顺序。   |
+
+### 开启日志
+
+使用 `log`插件即可
+
+```
+ Corefile: |
+    .:53 {
+        errors
+        log // 此处添加log插件。
+```
+
+### 特定域名使用自定义DNS服务器
+
+如果example.com类型后缀的域名需要经过自建DNS服务器（IP为10.10.0.10）进行解析的话，您可为域名配置一个单独的服务块。示例配置如下：
+
+```
+example.com:53 {
+  errors
+  cache 30
+  forward . 10.10.0.10
+}
+```
+
+### 开启Autopath插件
+
+
 
 # NodeLocalDNS
 

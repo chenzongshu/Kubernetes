@@ -17,7 +17,7 @@
 |third_party|第三方工具|
 |docs|文档|
 |example|使用例子|
-|vendor|项目依赖的Go的第三方包，比如docker客户端sdk，rest等|
+|vendor|项目依赖的Go的第三方包，比如docker客户端sdk，rest等，**软链到staging目录**|
 |hack|工具箱，各种编译，构建，校验的脚本都在这|
 |cluster|主要放一些配置脚本|
 |staging|存放部分核心库的暂存目录|

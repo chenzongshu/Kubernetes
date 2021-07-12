@@ -36,6 +36,39 @@ argocd-server-65d7bc9fc8-57m25       1/1     Running   0          10m
 
 默认的安装是ClusterIP的，可以用LB或者Ingress来暴露
 
+自己写个Ingress，因为argocd本身是https服务
+
+```yaml
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: argocd-server-ingress
+  namespace: argocd
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+spec:
+  rules:
+  - host: argocd.k8s.local
+    http:
+      paths:
+      - backend:
+          serviceName: argocd-server
+          servicePort: https
+```
+
+然后配置本地hosts，访问域名就可以看到该argocd的页面了
+
+默认的用户名是admin，密码保存在了secrets里面，可以用下面命令查看
+
+```
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+```
+
+
+
 # 使用
 
 

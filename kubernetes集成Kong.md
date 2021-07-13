@@ -356,4 +356,113 @@ tcpingresses.configuration.konghq.com            2021-04-30T09:22:19Z
 - kongcredentials：Kong用户的认证凭证。
 - kongingresses：定义代理行为规则，是对Ingress的补充配置。
 - kongplugins：插件的配置。
-  
+
+# Kong 高阶用法
+
+## 配置自定义插件
+
+比如自己写了一个插件
+
+```
+$ tree myheader
+myheader
+├── handler.lua
+└── schema.lua
+```
+
+用该插件来创建一个configmap
+
+```
+$ kubectl create configmap kong-plugin-myheader --from-file=myheader -n kong
+configmap/kong-plugin-myheader created
+```
+
+然后补充下面的kong的部署的yaml （下面只是新增的部分）
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingress-kong
+  namespace: kong
+spec:
+  template:
+    spec:
+      containers:
+      - name: proxy
+        env:
+        - name: KONG_PLUGINS
+          value: bundled,myheader
+        - name: KONG_LUA_PACKAGE_PATH
+          value: "/opt/?.lua;;"
+        volumeMounts:
+        - name: kong-plugin-myheader
+          mountPath: /opt/kong/plugins/myheader
+      volumes:
+      - name: kong-plugin-myheader
+        configMap:
+          name: kong-plugin-myheader
+```
+
+- 增加`volumeMounts` 和 `volumes` 的挂载
+
+- `KONG_PLUGINS` 环境变量设置加载了哪些插件
+
+- `KONG_LUA_PACKAGE_PATH` 设置找插件的地方
+
+然后就可以和其他插件一样使用该插件了
+
+```yaml
+echo "
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: my-custom-plugin
+config:
+  header_value: "my first plugin"
+plugin: myheader
+" | kubectl apply -f -
+```
+
+## CORS跨域
+
+[Open-Source API Management and Microservice Management](https://docs.konghq.com/hub/kong-inc/cors/)
+
+> 还有另外两种方法
+
+> 1、在php的Nginx的配置上单独配置跨域
+
+> 2、使用KongPlugin给每个服务单独配置跨域
+
+配置全局跨域，其中参数可以自己调整
+
+```yaml
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: cors
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    global: "true"
+config:
+  origins:
+  - '*'
+  methods:
+  - GET
+  - POST
+  headers:
+  - Accept
+  - Accept-Version
+  - Content-Length
+  - Content-MD5
+  - Content-Type
+  - Date
+  - X-Auth-Token
+  exposed_headers:
+  - X-Auth-Token
+  credentials: true
+  max_age: 3600
+  preflight_continue: false
+plugin: cors
+```

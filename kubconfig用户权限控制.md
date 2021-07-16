@@ -260,3 +260,125 @@ kubectl config use-context kubernetes-admin@kubernetes
   name: docker-for-desktop
 ```
 
+
+
+# 实例
+
+创建一个只有list pod权限的sa并生成kubeconfig
+
+## 创建sa、clusterrole、clusterrolebinding
+
+保存下面的成`info.yaml`文件，然后执行命令` ``kubectl apply -f ``info.yaml`
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: information-safety
+  namespace: ci-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  annotations:
+    rbac.authorization.kubernetes.io/autoupdate: "true"
+  labels:
+    kubernetes.io/bootstrapping: rbac-defaults
+  name: information-safety
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - 'pods'
+  verbs:
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: information-safety
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: information-safety
+subjects:
+- kind: ServiceAccount
+  name: information-safety
+  namespace: ci-system
+```
+
+## 创建kubeconfig
+
+找到sa对应的secrets `information-safety-token-ckrrz` （名字就可以看出，和sa名前面一样）
+
+```
+# kubectl -n ci-system get secrets
+NAME                            TYPE                                  DATA   AGE
+default-token-4d7gv              kubernetes.io/service-account-token   3      4m17s
+information-safety-token-ckrrz   kubernetes.io/service-account-token   3      3m17s
+```
+
+然后获取集群证书备用
+
+```
+ca=$(kubectl get secret information-safety-token-ckrrz -n ci-system -o jsonpath='{.data.ca\.crt}')
+```
+
+然后生成kubeconfig文件
+
+```
+kubectl config set-cluster dev --server=https://xxxxxx:6443 --certificate-authority=$ca --kubeconfig=/home/information-safety.config
+```
+
+- server为APIServer的地址
+- kubeconfig配置为文件需要保存的名字和位置
+
+## 添加用户
+
+先找到第一步创建的sa的token
+
+```
+token=$(kubectl get secret information-safety-token-pr9js -n ci-system -o jsonpath='{.data.token}'|base64 -d)
+```
+
+然后在kubeconfig里面使用这个token添加
+
+```
+kubectl config set-credentials information-safety --kubeconfig=/home/information-safety.config --token=$token
+```
+
+## 指定使用的context
+
+```
+ kubectl config set-context information-safety@dev --cluster=dev --user=information-safety --kubeconfig=/home/information-safety.config
+
+ kubectl config use-context information-safety@dev --kubeconfig=/home/information-safety.config
+```
+
+- 注意`information-safety@dev`为context名字
+
+## 验证
+
+可以看到，已经可以查看pod，但是查看不了deployment
+
+```
+# kubectl --kubeconfig=/home/information-safety.config get deploy
+Error from server (Forbidden): deployments.apps is forbidden: User "system:serviceaccount:ci-system:information-safety" cannot list resource "deployments" in API group "apps" in the namespace "default"
+
+# kubectl --kubeconfig=/home/information-safety.config get po -o wide
+NAME                                  READY   STATUS             RESTARTS   AGE   IP               NODE                        NOMINATED NODE   READINESS GATES
+consul-consul-469k7                   1/1     Running            0          76d   10.130.xxx.xxx    cn-shenzhen.10.130.xxx.xxx   <none>           <none>
+
+```
+
+## kubeconfig使用
+
+两种用法：
+
+1、直接把kubeconfig文件改名成config，放入对应用户的 `~/.kube/config`
+
+2、使用kubectl的时候指定kubeconfig，如：
+
+```
+kubectl --kubeconfig=/home/information-safety.config get po -o wide
+```

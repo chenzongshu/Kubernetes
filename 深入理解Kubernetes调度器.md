@@ -23,6 +23,43 @@ k8s最资源的调度能力是它有别于IaaS平台的能, 它的调度就是�
 <= kubelet创建Pod, 包括storage以及network，最后等所有的资源都完成，kubelet会把状态更新为Running
 ```
 
+### Policy
+
+Scheduler 的调度策略启动配置目前支持三种方式，配置文件 / 命令行参数 / ConfigMap。调度策略可以配置指定调度主流程中要用哪些过滤器 (Predicates)、打分器 (Priorities) 、外部扩展的调度器 (Extenders)，以及最新支持的 SchedulerFramwork 的自定义扩展点 (Plugins)。
+
+### Informer
+
+Scheduler 在启动的时候通过 K8s 的 informer 机制以 List+Watch 从 kube-apiserver 获取调度需要的数据例如：Pods、Nodes、Persistant Volume(PV), Persistant Volume Claim(PVC) 等等，并将这些数据做一定的预处理作为调度器的的 Cache。
+
+### 调度流水线
+
+通过 **Informer** 将需要调度的 Pod 插入 Queue 中，Pipeline 会循环从 Queue Pop 等待调度的 Pod 放入 Pipeline 执行。
+
+调度流水线 (Schedule Pipeline) 主要有三个阶段：Scheduler Thread，Wait Thread，Bind Thread。
+
+- **Scheduler Thread 阶段**:  Schduler Thread 会经历 Pre Filter -> Filter -> Post Filter-> Score -> Reserve，可以简单理解为 Filter -> Score -> Reserve。
+
+Filter 阶段用于选择符合 Pod Spec 描述的 Nodes；Score 阶段用于从 Filter 过后的 Nodes 进行打分和排序；Reserve 阶段将 Pod 跟排序后的最优 Node 的 NodeCache 中，表示这个 Pod 已经分配到这个 Node 上, 让下一个等待调度的 Pod 对这个 Node 进行 Filter 和 Score 的时候能看到刚才分配的 Pod。
+
+- **Wait Thread 阶段:** 这个阶段可以用来等待 Pod 关联的资源的 Ready 等待，例如等待 PVC 的 PV 创建成功，或者 Gang 调度中等待关联的 Pod 调度成功等等；
+- **Bind Thread 阶段:** 用于将 Pod 和 Node 的关联持久化 Kube APIServer。
+
+整个调度流水线只有在 Scheduler Thread 阶段是串行的一个 Pod 一个 Pod 的进行调度，在 Wait 和 Bind 阶段 Pod 都是异步并行执行。
+
+#### Schduler Thread 
+
+在 Scheduler Pipeline 拿到一个等待调度的 Pod，会从 NodeCache 里面拿到相关的 Node 执行 Filter 逻辑匹配，这从 NodeCache 遍历 Node 的过程有一个空间算法上的优化.
+
+
+
+### SchedulingQueue
+
+有三个子队列 activeQ、backoffQ、unschedulableQ。
+
+Scheduler 启动的时候所有等待被调度的 Pod 都会进入 activieQ，activeQ 会按照 Pod 的 priority 进行排序，Scheduler Pipepline 会从 activeQ 获取一个 Pod 进行 Pipeline 执行调度流程，当调度失败之后会直接根据情况选择进入 unschedulableQ 或者 backoffQ，如果在当前 Pod 调度期间 Node Cache、Pod Cache 等 Scheduler Cache 有变化就进入 backoffQ，否则进入 unschedulableQ。
+
+unschedulableQ 会定期较长时间（例如 60 秒）刷入 activeQ 或者 backoffQ，或者在 Scheduler Cache 发生变化的时候触发关联的 Pod 刷入 activeQ 或者 backoffQ；backoffQ 会以 backoff 机制相比 unschedulableQ 比较快地让待调度的 Pod 进入 activeQ 进行重新调度。
+
 ## Predicates预选
 
 ### 节点预选

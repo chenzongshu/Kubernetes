@@ -228,3 +228,192 @@ func (a *HorizontalController) computeReplicasForMetric(hpa *autoscalingv2.Horiz
 
 上面度量类型不做详细解释，可以看另外一篇文章《弹性伸缩HPA简介》，下面以Pod类型来看看代码
 
+```go
+func (a *HorizontalController) computeStatusForPodsMetric(currentReplicas int32, metricSpec autoscalingv2.MetricSpec, hpa *autoscalingv2.HorizontalPodAutoscaler, selector labels.Selector, status *autoscalingv2.MetricStatus, metricSelector labels.Selector) (replicaCountProposal int32, timestampProposal time.Time, metricNameProposal string, condition autoscalingv2.HorizontalPodAutoscalerCondition, err error) {
+	//计算需要扩缩容的数量
+	replicaCountProposal, utilizationProposal, timestampProposal, err := a.replicaCalc.GetMetricReplicas(currentReplicas, metricSpec.Pods.Target.AverageValue.MilliValue(), metricSpec.Pods.Metric.Name, hpa.Namespace, selector, metricSelector)
+	if err != nil {
+		condition = a.getUnableComputeReplicaCountCondition(hpa, "FailedGetPodsMetric", err)
+		return 0, timestampProposal, "", condition, err
+	}
+	...
+	return replicaCountProposal, timestampProposal, fmt.Sprintf("pods metric %s", metricSpec.Pods.Metric.Name), autoscalingv2.HorizontalPodAutoscalerCondition{}, nil
+}
+
+// pkg/controller/podautoscaler/replica_calculator.go
+func (c *ReplicaCalculator) GetMetricReplicas(currentReplicas int32, targetUtilization int64, metricName string, namespace string, selector labels.Selector, metricSelector labels.Selector) (replicaCount int32, utilization int64, timestamp time.Time, err error) {
+	//获取pod对应的度量数据
+	metrics, timestamp, err := c.metricsClient.GetRawMetric(metricName, namespace, selector, metricSelector)
+	if err != nil {
+		return 0, 0, time.Time{}, fmt.Errorf("unable to get metric %s: %v", metricName, err)
+	}
+	//通过结合度量数据来计算希望扩缩容的数量是多少
+	replicaCount, utilization, err = c.calcPlainMetricReplicas(metrics, currentReplicas, targetUtilization, namespace, selector, v1.ResourceName(""))
+	return replicaCount, utilization, timestamp, err
+}
+```
+
+这里会调用`GetRawMetric`方法来获取pod对应的度量数据，然后再调用`calcPlainMetricReplicas`方法结合度量数据与目标期望来计算希望扩缩容的数量是多少。
+
+### calcPlainMetricReplicas
+
+calcPlainMetricReplicas方法逻辑比较多
+
+```go
+func (c *ReplicaCalculator) calcPlainMetricReplicas(metrics metricsclient.PodMetricsInfo, currentReplicas int32, targetUtilization int64, namespace string, selector labels.Selector, resource v1.ResourceName) (replicaCount int32, utilization int64, err error) {
+
+	podList, err := c.podLister.Pods(namespace).List(selector)
+	...
+  /******* part1 先计算使用率   *********/
+	//将pod分成三类进行统计，得到ready的pod数量、unready、ignored、missing Pod集合
+	readyPodCount, unreadyPods, missingPods, ignoredPods := groupPods(podList, metrics, resource, c.cpuInitializationPeriod, c.delayOfInitialReadinessStatus)
+	//在度量的数据里移除ignored、unready Pods集合的数据
+	removeMetricsForPods(metrics, ignoredPods)
+	removeMetricsForPods(metrics, unreadyPods)
+	//计算pod中container request 设置的资源之和
+	requests, err := calculatePodRequests(podList, resource)
+  //metric取了2值：使用率和利用率，其中使用率是 utilization/targetUtilization
+	usageRatio, utilization := metricsclient.GetMetricUtilizationRatio(metrics, targetUtilization)  
+	
+  /******* part2 把特殊状态的Pod单独处理使用率，再计算使用率   *********/
+  if len(missingPods) > 0 {
+        ...
+				metrics[podName] = metricsclient.PodMetric{Value: targetUtilization}
+			}
+		} else {
+        ...
+				metrics[podName] = metricsclient.PodMetric{Value: 0}
+
+	if rebalanceIgnored {
+		  ...
+			metrics[podName] = metricsclient.PodMetric{Value: 0}
+  // 再计算使用率
+  newUsageRatio, _ := metricsclient.GetMetricUtilizationRatio(metrics, targetUtilization)
+  ...
+  newReplicas := int32(math.Ceil(newUsageRatio * float64(len(metrics))))
+}
+```
+
+- ceil函数是向上取整
+- 最后的算法基本和[官网文档](https://kubernetes.io/zh/docs/tasks/run-application/horizontal-pod-autoscale/)一致，`Ceil(newUsageRatio * float64(len(metrics)`，本身`newUsageRatio`就是 `utilization/targetUtilization` 算出来的
+
+## normalizeDesiredReplicasWithBehaviors
+
+下面代码里面包含了behavior的几个设置
+
+- 稳定窗口：stabilizationWindowSeconds，为了防止指标抖动造成频繁扩缩容，所以有这么一个概念，默认是300秒即5分钟。会去统计5分钟的所有数据来确定是否扩缩容。默认情况只有缩容才有稳定窗口
+- type有Pod和Percent，分别是按照Pod数和百分比扩容
+
+```go
+func (a *HorizontalController) normalizeDesiredReplicasWithBehaviors(hpa *autoscalingv2.HorizontalPodAutoscaler, key string, currentReplicas, prenormalizedDesiredReplicas, minReplicas int32) int32 {
+	//如果StabilizationWindowSeconds设置为空，那么给一个默认的值,默认300s
+	a.maybeInitScaleDownStabilizationWindow(hpa)
+	normalizationArg := NormalizationArg{
+		Key:               key,
+		ScaleUpBehavior:   hpa.Spec.Behavior.ScaleUp,
+		ScaleDownBehavior: hpa.Spec.Behavior.ScaleDown,
+		MinReplicas:       minReplicas,
+		MaxReplicas:       hpa.Spec.MaxReplicas,
+		CurrentReplicas:   currentReplicas,
+		DesiredReplicas:   prenormalizedDesiredReplicas}
+	//根据参数获取建议副本数
+	stabilizedRecommendation, reason, message := a.stabilizeRecommendationWithBehaviors(normalizationArg)
+	normalizationArg.DesiredReplicas = stabilizedRecommendation
+	... 
+	//根据scaleDown或scaleUp指定的参数做限制
+	desiredReplicas, reason, message := a.convertDesiredReplicasWithBehaviorRate(normalizationArg)
+	... 
+	return desiredReplicas
+}
+```
+
+这个方法主要分为两部分
+
+- 一部分是调用stabilizeRecommendationWithBehaviors方法来根据时间窗口来获取一个建议副本数；
+- 另一部分convertDesiredReplicasWithBehaviorRate方法是根据scaleDown或scaleUp指定的参数做限制。
+
+### stabilizeRecommendationWithBehaviors
+
+```go
+func (a *HorizontalController) stabilizeRecommendationWithBehaviors(args NormalizationArg) (int32, string, string) {
+  ...
+
+	// 如果期望的副本数大于等于当前的副本数,则延迟时间=scaleUpBehaviro的稳定窗口时间
+	if args.DesiredReplicas >= args.CurrentReplicas {
+		scaleDelaySeconds = *args.ScaleUpBehavior.StabilizationWindowSeconds
+		betterRecommendation = min
+	} else {
+		// 期望副本数<当前的副本数
+		scaleDelaySeconds = *args.ScaleDownBehavior.StabilizationWindowSeconds
+		betterRecommendation = max
+	}
+	//获取一个最大的时间窗口
+	maxDelaySeconds := max(*args.ScaleUpBehavior.StabilizationWindowSeconds, *args.ScaleDownBehavior.StabilizationWindowSeconds)
+	obsoleteCutoff := time.Now().Add(-time.Second * time.Duration(maxDelaySeconds))
+
+	cutoff := time.Now().Add(-time.Second * time.Duration(scaleDelaySeconds))
+	for i, rec := range a.recommendations[args.Key] {
+		if rec.timestamp.After(cutoff) {
+			// 在截止时间之后，则当前建议有效, 则根据之前的比较函数来决策最终的建议副本数
+			recommendation = betterRecommendation(rec.recommendation, recommendation)
+		}
+		//如果被遍历到的建议时间是在obsoleteCutoff之前，那么需要重新设置建议
+		if rec.timestamp.Before(obsoleteCutoff) {
+			foundOldSample = true
+			oldSampleIndex = i
+		}
+	}
+	//如果被遍历到的建议时间是在obsoleteCutoff之前，那么需要重新设置建议
+	if foundOldSample {
+		a.recommendations[args.Key][oldSampleIndex] = timestampedRecommendation{args.DesiredReplicas, time.Now()}
+	} else {
+		a.recommendations[args.Key] = append(a.recommendations[args.Key], timestampedRecommendation{args.DesiredReplicas, time.Now()})
+	}
+	return recommendation, reason, message
+}
+```
+
+# 总结
+
+```
+┌─────────────────────────┐                                                                                                                            
+│           Run           │                                                                                                                            
+└─────────────────────────┘                                                                                                                            
+             │                                                    ┌────────────────────────┐                                                           
+             │                                                    │computeStatusForObjectMe│                                                           
+             ▼                                               ┌───▶│          tric          │                                                           
+┌─────────────────────────┐                                  │    └────────────────────────┘                                                           
+│   reconcileAutoscaler   │                                  │                                                                                         
+└─────────────────────────┘                                  │    ┌────────────────────────┐                                                           
+             │                                               │    │computeStatusForPodsMetr│   ┌────────────────────────┐                              
+             │                                               ├───▶│           ic           │──▶│   GetMetricReplicas    │                              
+             │                                               │    └────────────────────────┘   └────────────────────────┘                              
+             │                                               │                                              │                                          
+             ▼                                               │    ┌────────────────────────┐                ▼                                          
+┌─────────────────────────┐    ┌────────────────────────┐    │    │computeStatusForResource│   ┌────────────────────────┐                              
+│computeReplicasForMetrics│───▶│computeReplicasForMetric│────┼───▶│         Metric         │   │computeStatusForPodsMetr│    ┌────────────────────────┐
+└─────────────────────────┘    └────────────────────────┘    │    └────────────────────────┘   │           ic           │───▶│      GetRawMetric      │
+             │                                               │                                 └────────────────────────┘    └────────────────────────┘
+             │                                               │    ┌────────────────────────┐                                              │            
+             │                                               │    │computeStatusForContaine│                                              ▼            
+ hpa.Spec.Behavior != nil                                    ├───▶│    rResourceMetric     │                                 ┌────────────────────────┐
+             │                                               │    └────────────────────────┘                                 │calcPlainMetricReplicas │
+             │                                               │                                                               │                        │
+             ▼                                               │    ┌────────────────────────┐                                 └────────────────────────┘
+┌─────────────────────────┐                                  │    │computeStatusForExternal│                                                           
+│normalizeDesiredReplicasW│                                  └───▶│         Metric         │                                                           
+│      ithBehaviors       │──────────┐                            └────────────────────────┘                                                           
+└─────────────────────────┘          │                                                                                                                 
+             │                       │          ┌─────────────────────────┐                                                                            
+             │                       │          │stabilizeRecommendationWi│                                                                            
+             │                       ├─────────▶│       thBehaviors       │                                                                            
+        if rescale                   │          └─────────────────────────┘                                                                            
+             │                       │                                                                                                                 
+             │                       │                                                                                                                 
+             ▼                       │          ┌─────────────────────────┐                                                                            
+┌─────────────────────────┐          │          │convertDesiredReplicasWit│                                                                            
+│a.scaleNamespacer.Scales(│          └─────────▶│      hBehaviorRate      │                                                                            
+│       ).Update()        │                     └─────────────────────────┘                                                                            
+└─────────────────────────┘                                                                                                                            
+```
+

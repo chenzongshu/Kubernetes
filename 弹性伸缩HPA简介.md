@@ -14,12 +14,13 @@ HPA全称是 Horizontal Pod Autoscaler，是对k8s的workload的副本数进行�
 
 ## metrics分类
 
-v2版本有四种metric： Resource、Pods、Object、External，对应不同场景
+v2版本有五种metric： Resource、Pods、Object、ContainerResource、External，对应不同场景
 
 - `Resource`：支持k8s里Pod的所有系统资源（包括cpu、memory等），但是一般只会用cpu，memory因为不太敏感而且跟语言相关：大多数语言都有内存池及内置GC机制导致进程内存监控不准确。
 - `Pods`：表示cpu，memory等系统资源之外且是由Pod自身提供的自定义metrics数据，比如用户可以在web服务的pod里提供一个promesheus metrics的自定义接口，里面暴露了本pod的实时QPS监控指标，这种情况下就应该在HPA里直接使用Pods类型的metrics。
 - `Object`：表示监控指标不是由Pod本身的服务提供，但是可以通过k8s的其他资源Object提供metrics查询，比如ingress等，一般Object是需要汇聚关联的Deployment下的所有的pods总的指标。
 - `External`：也属于自定义指标，与Pods和Object不同的是，其监控指标的来源跟k8s本身无关，metrics的数据完全取自外部的系统。
+- `ContainerResource`: 对于带有多个Sidecar容器的Pod，可以使用`ContainerResource`来计算所有Pod中某一个容器的平均值来扩容
 
 ## 算法
 

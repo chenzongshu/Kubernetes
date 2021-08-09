@@ -134,6 +134,16 @@ func (a *HorizontalController) reconcileAutoscaler(hpav1Shared *autoscalingv1.Ho
 }
 ```
 
+### v1版本转换成v2
+
+上面可以看到，一进入`reconcileAutoscaler`就直接把hpa v1版本的结构体转换成了v2版本的结构体
+
+```go
+unsafeConvertToVersionVia(hpav1, autoscalingv2.SchemeGroupVersion)
+```
+
+
+
 ## computeReplicasForMetrics
 
 computeReplicasForMetrics 计算 HPA 中列出的指标规范所需的副本数，返回计算的副本计数的最大值、相关指标的描述以及所有计算指标的状态。

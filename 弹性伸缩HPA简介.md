@@ -12,6 +12,8 @@ HPA全称是 Horizontal Pod Autoscaler，是对k8s的workload的副本数进行�
 
 > HPA必须要设置request的值才会工作
 
+HPA的实现是一个控制循环，由controller manager的–horizontal-pod-autoscaler-sync-period参数指定周期（默认值为15秒）。每个周期内，controller manager根据每个HorizontalPodAutoscaler定义中指定的指标查询资源利用率。controller manager可以从resource metrics API（pod 资源指标）和custom metrics API（自定义指标）获取指标。
+
 ## metrics分类
 
 v2版本有五种metric： Resource、Pods、Object、ContainerResource、External，对应不同场景

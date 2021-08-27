@@ -1,28 +1,27 @@
-本文基于Istio 1.7.4来安装使用Istio
-
 在 Istio 1.5 以上，饱受诟病的 `Mixer` 终于被废弃了，新版本的 HTTP 遥测默认基于 in-proxy Stats filter，同时可使用 WebAssembly开发 `in-proxy` 扩展。更详细的说明请参考 Istio 1.5 发布公告: https://istio.io/news/releases/1.5.x/announcing-1.5/
 
 # Istio部署
+
+可以参考官方文档： https://istio.io/latest/zh/docs/setup/install/istioctl/#verify-a-successful-installation
 
 ## 下载 Istio 部署文件
 
 可以去github下载 https://github.com/istio/istio/releases/tag/1.7.4
 
-也可以执行下载命令
+也可以执行下载命令（）
 
-```
-curl -L https://istio.io/downloadIstio | sh -
+```bash
+curl -L https://istio.io/downloadIstio | sh -    #下载最新版
+curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.6.8 TARGET_ARCH=x86_64 sh - #下载指定版
 ```
 
-下载完成后会得到一个 `istio-1.7.4` 目录，里面包含了：
+下载完成后会得到一个 `istio-x.x.x` 目录，里面包含了：
 
 - `install/kubernetes` : 针对 Kubernetes 平台的安装文件
 
 - `samples` : 示例应用
 
 - `bin` : istioctl 二进制文件，可以用来手动注入 sidecar proxy
-
-  
 
 将 istioctl 拷贝到 `/usr/local/bin/` 中 或者把文件夹中的bin目录添加到系统变量
 
@@ -69,8 +68,6 @@ Istio configuration profiles:
     minimal
 ```
 
-
-
 它们之间的差异如下：
 
 |                      | default | demo  | minimal | remote |
@@ -109,33 +106,20 @@ Istio CNI 插件的主要设计目标是消除这个 privileged 权限的 init c
 
 详细内容可以参考[官方文档](https://v1-16.docs.kubernetes.io/docs/tasks/administer-cluster/guaranteed-scheduling-critical-addon-pods/)。
 
-
-
-最简单的安装方式， 安装default模板， 可以使用如下命令
+最简单的安装方式， 安装demo模板， 可以使用如下命令
 
 ```
-[root@localhost istio-1.7.4]# istioctl manifest install
-This will install the default Istio profile into the cluster. Proceed? (y/N) y
-Detected that your cluster does not support third party JWT authentication. Falling back to less secure first party JWT. See https://istio.io/docs/ops/best-practices/security/#configure-third-party-service-account-tokens for details.
-✔ Istio core installed
-✔ Istiod installed
-✔ Ingress gateways installed
-✔ Installation complete
+istioctl install --set profile=demo -y
 ```
 
-如果要安装其他配置文件， 可以使用如下命令
+Demo模板安装完成可以看到启动的Pod
 
-```
-istioctl manifest install --set profile=demo
-```
-
-default模板安装完成可以看到启动的Pod
-
-```
-[root@localhost istio-1.7.4]# kubectl get pods -n istio-system
+```bash
+[root@node000006 istio-1.11.0]# kubectl -n istio-system get po
 NAME                                    READY   STATUS    RESTARTS   AGE
-istio-ingressgateway-55f67b4b7f-722gs   1/1     Running   0          14h
-istiod-7c487bdcd7-8qzn6                 1/1     Running   0          14h
+istio-egressgateway-f55b8c8fd-5r9pt     1/1     Running   0          26m
+istio-ingressgateway-75cd9dc88b-snl6v   1/1     Running   0          26m
+istiod-d746f686f-dl8sf                  1/1     Running   0          26m
 ```
 
 ## 检测安装是否成功
@@ -158,8 +142,8 @@ Istio is installed successfully
 
 ## 卸载Istio
 
-```
-istioctl manifest generate --set profile=demo | kubectl delete -f -
+```bash
+istioctl x uninstall --purge
 ```
 
 
@@ -172,22 +156,22 @@ istioctl manifest generate --set profile=demo | kubectl delete -f -
 
 1. 进入 Istio 安装目录。
 
-2. Istio 默认[自动注入 Sidecar](https://istio.io/latest/zh/docs/setup/additional-setup/sidecar-injection/#automatic-sidecar-injection). 请为 `default` 命名空间打上标签 `istio-injection=enabled`：
+2. Istio 默认[自动注入 Sidecar](https://istio.io/latest/zh/docs/setup/additional-setup/sidecar-injection/#automatic-sidecar-injection). 创建一个namespaces `istio-test` ，然后为其打上标签 `istio-injection=enabled`：
 
-   ```
-   $ kubectl label namespace default istio-injection=enabled
+   ```bash
+   $ kubectl label namespace istio-test istio-injection=enabled
    ```
 
 3. 使用 `kubectl` 部署应用：
 
-   ```
-   $ kubectl apply -f samples/bookinfo/platform/kube/bookinfo.yaml
+   ```bash
+   $ kubectl apply -f samples/bookinfo/platform/kube/bookinfo.yaml -n istio-test
    ```
 
     经过漫长的等待，可以看到Pod已经启动成功
 
-    ```
-[root@localhost istio-1.7.4]# kubectl get po
+    ```bash
+   # kubectl get po -n istio-test
    NAME                              READY   STATUS    RESTARTS   AGE
    details-v1-79c697d759-c4p44       2/2     Running   0          2d15h
    productpage-v1-65576bb7bf-9mdhg   2/2     Running   0          2d15h
@@ -196,4 +180,60 @@ istioctl manifest generate --set profile=demo | kubectl delete -f -
    reviews-v2-6c5bf657cf-hxmr9       2/2     Running   0          2d15h
    reviews-v3-5f7b9f4f77-gsj5s       2/2     Running   0          2d15h
     ```
+
+4. 测试BookInfo是否运行
+
+   进入上面的某个Pod，执行curl命令
+
+   ```
+   # kubectl -n istio-test exec -it ratings-v1-7d99676f7f-9ndm9 -c ratings -- curl productpage:9080/productpage | grep -o "<title>.*</title>"
+   <title>Simple Bookstore App</title>
+   ```
+
+## 部署Ingress
+
+1. 部署Ingress
+
+```bash
+# kubectl apply -f samples/bookinfo/networking/bookinfo-gateway.yaml -n istio-test
+gateway.networking.istio.io/bookinfo-gateway created
+virtualservice.networking.istio.io/bookinfo created
+```
+
+2. 确认网关
+
+```bash
+# kubectl -n istio-test get gateway
+NAME               AGE
+bookinfo-gateway   2m6s
+```
+
+3. 设置网关环境变量
+
+如果是LoadBalance类型的，用下面命令
+
+```bash
+# kubectl -n istio-system get svc
+NAME                   TYPE           CLUSTER-IP        EXTERNAL-IP      PORT(S)                                                                      AGE
+istio-egressgateway    ClusterIP      192.168.59.204    <none>           80/TCP,443/TCP                                                               48m
+istio-ingressgateway   LoadBalancer   192.168.107.226   120.25.245.xxx   15021:31455/TCP,80:32104/TCP,443:31870/TCP,31400:30739/TCP,15443:31341/TCP   48m
+istiod                 ClusterIP      192.168.230.52    <none>           15010/TCP,15012/TCP,443/TCP,15014/TCP                                        48m
+```
+
+```bash
+export INGRESS_HOST=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+export INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="http2")].port}')
+export SECURE_INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="https")].port}')
+export TCP_INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="tcp")].port}')
+export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
+```
+
+4. 在集群外访问
+
+```bash
+# curl -s http://${GATEWAY_URL}/productpage | grep -o "<title>.*</title>"
+<title>Simple Bookstore App</title>
+```
+
+也可以浏览器打开 `http://120.25.245.222/productpage`
 

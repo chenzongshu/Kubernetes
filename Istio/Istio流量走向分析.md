@@ -163,3 +163,11 @@ Productpage Pod中的Envoy创建了多个Outbound Listener
 
 下面是Proudctpage服务中9080的路由配置，从文件中可以看到对应了5个`virtual host`，分别是details、productpage、ratings、reviews和allow_any，前三个virtual host分别对应到不同服务的`outbound cluster`。最后一个对应到`PassthroughCluster`,即当入向的i请求没有找到对应的服务时，也会让其直接通过。
 
+# BookInfo流量分析
+
+以官方的bookinfo为例, 来分析流量走向
+
+Productpage服务调用Reviews服务的请求流程:
+
+
+

@@ -5,27 +5,16 @@ Kubebuilder 是社区推荐的创建kubernetes APIs的框架
 
 # 安装
 
-
+> kubebuilder从3.0开始，下载包只含二进制文件
 
 1. 从github网页  https://github.com/kubernetes-sigs/kubebuilder 下载二进制包
 2. 解压
 
-```
-tar -C /usr/local -zxvf kubebuilder_2.3.0_linux_amd64.tar.gz
-mv /usr/local/kubebuilder_2.3.0_linux_amd64 /usr/local/kubebuilder
-```
-
-3. 修改环境变量
-
-```
-vim ~/.profile
-
-export PATH=$PATH:/usr/local/kubebuilder/bin
-
-source ~/.profile
+```bash
+mv kubebuilder_linux_amd64 /usr/local/bin/kubebuilder
 ```
 
-4. 开启go module和对go mod配置proxy
+3. 注意开启go module和对go mod配置proxy
 
 ```
 vim ~/.profile

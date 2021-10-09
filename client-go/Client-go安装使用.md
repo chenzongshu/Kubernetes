@@ -48,6 +48,52 @@ go get -u k8s.io/apimachinery/...
 
 > 说明一下，为什么要使用 `-u` 参数来拉取最新的该依赖库呢？那是因为最新的 client-go 库只能保证跟最新的 `apimachinery` 库一起运行
 
+# 获取Kubernetes API
+
+去官网地址获取，自己更改版本号
+
+```
+https://v1-21.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.21/
+```
+
+# 认证
+
+## 集群内
+
+client-go 在集群内，如果用 `rest.InClusterConfig()` ，使用SA的token，默认default是挂载 Pod at the `/var/run/secrets/kubernetes.io/serviceaccount` 位置
+
+```go
+	// creates the in-cluster config
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		panic(err.Error())
+	}
+```
+
+## 集群外
+
+使用外部kubeconfig文件
+
+```go
+	// 配置 k8s 集群外 kubeconfig 配置文件，默认位置 $HOME/.kube/config
+	var kubeconfig *string
+	if home := homeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	}
+	flag.Parse()
+
+	//在 kubeconfig 中使用当前上下文环境，config 获取支持 url 和 path 方式
+	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	if err != nil {
+		panic(err.Error())
+	}
+
+```
+
+
+
 # Demo
 
 创建一个文件夹`cgtest`, 在里面先执行

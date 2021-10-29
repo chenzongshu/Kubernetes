@@ -580,3 +580,19 @@ grafana                 ClusterIP   10.233.38.141   <none>        3000/TCP      
 kubectl port-forward --address 0.0.0.0 svc/grafana -n monitoring 3000:3000
 ```
 
+# 删除Terminating的Namespaces
+
+以test举例
+
+```
+kubectl get ns test -o json > test.json
+```
+
+编辑，去掉test.json里面的 `finalizers` 字段里面的`kubernetes`行
+
+然后执行命令
+
+```
+kubectl replace --raw "/api/v1/namespaces/test/finalize" -f ./test.json
+```
+

@@ -461,6 +461,8 @@ kubectl delete pods,services -l name=myLabel                              # 删�
 kubectl -n my-ns delete pod,svc --all                                     # 删除在 my-ns 名字空间中全部的 Pods 和服务
 # 删除所有与 pattern1 或 pattern2 awk 模式匹配的 Pods
 kubectl get pods  -n mynamespace --no-headers=true | awk '/pattern1|pattern2/{print $1}' | xargs  kubectl delete -n mynamespace pod
+# 删除所有Evicted状态的pods
+kubectl get pods -n test | grep Evicted | awk '{print $1}' | xargs kubectl delete pod -n test
 ```
 
 ## 与运行中的 Pods 进行交互

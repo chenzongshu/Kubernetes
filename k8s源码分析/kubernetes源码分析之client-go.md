@@ -1,5 +1,15 @@
 # 前言
 
+# 模块
+
+- **Reflector**：Reflector 向 apiserver watch 特定类型的资源，拿到变更通知后将其丢到 DeltaFIFO 队列中；
+- **Informer**： Informer 从 DeltaFIFO 中 pop 相应对象，然后通过 Indexer 将对象和索引丢到本地 cache 中，再触发相应的事件处理函数（Resource Event Handlers）运行；
+- **Indexer**： Indexer 主要提供一个对象根据一定条件检索的能力，典型的实现是通过 namespace/name 来构造 key ，通过 Thread Safe Store 来存储对象；
+- **Workqueue**：Workqueue 一般使用的是延时队列实现，在 Resource Event Handlers 中会完成将对象的 key 放入 workqueue 的过程，然后我们在自己的逻辑代码里从 workqueue 中消费这些 key；
+- **ClientSet**：Clientset 提供的是资源的 CURD 能力，和 apiserver 交互；
+- **Resource Event Handlers**：我们在 Resource Event Handlers 中一般是添加一些简单的过滤功能，判断哪些对象需要加到 workqueue 中进一步处理；对于需要加到 workqueue 中的对象，就提取其 key，然后入队；
+- **Worker**：Worker 指的是我们自己的业务代码处理过程，在这里可以直接接收到 workqueue 里的任务，可以通过 Indexer 从本地缓存检索对象，通过 Clientset 实现对象的增删改查逻辑。
+
 
 
 # 源码结构

@@ -1,4 +1,4 @@
-我们来根据官方文档实战一下kubebuilder，创建一个CronJob的资源类型
+我们来根据官方文档实战一下kubebuilder
 
 # 初始化
 
@@ -13,40 +13,36 @@ kubebuilder的安装过程省略，可以见我的文档，主要是的前置依
 如果使用的文件夹不在`GOPATH`下面，需要先用go mod初始化
 
 ```bash
-go mod init tutorial.kubebuilder.io
+go mod init nodecontroller.controller.io
 ```
 
 然后项目初始化
 
 ```bash
-kubebuilder init --domain tutorial.kubebuilder.io
+kubebuilder init --domain nodecontroller.controller.io
 ······
-go fmt ./...
-go vet ./...
-go build -o bin/manager main.go
+go: downloading github.com/nxadm/tail v1.4.8
 Next: define a resource with:
 $ kubebuilder create api
 ```
 
 > 如果出现`which: no controller-gen`的错误，说明`$GOPATH/bin`不在`$PATH`环境变量中，此时将`$GOPATH/bin/controller-gen`程序放到`/bin/`目录即可，root用户的话是`/root/go/bin`
 
-然后创建api
+然后创建api，注意：
+
+- `kind` 第一个字母必须大写
+- `group` 小写
 
 ```bash
-$kubebuilder create api --group batch --version v1 --kind CronJob
+$kubebuilder create api --group controller --version v1 --kind NodeController
 Create Resource [y/n]
 y
 Create Controller [y/n]
 y
-Writing scaffold for you to edit...
-api/v1/cronjob_types.go
-controllers/cronjob_controller.go
-Running make:
-$ make
-/root/go/bin/controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."
-go fmt ./...
-go vet ./...
-go build -o bin/manager main.go
+······
+/Users/chenzongshu/node-controller/bin/controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."
+Next: implement your new API and generate the manifests (e.g. CRDs,CRs) with:
+$ make manifests
 ```
 
 ## init
@@ -54,19 +50,30 @@ go build -o bin/manager main.go
 init之后文件夹里面可以看到生成的文件
 
 ```bash
+.
+├── Dockerfile
+├── Makefile
+├── PROJECT
+├── api
+│   └── v1
+│       ├── groupversion_info.go
+│       ├── nodecontroller_types.go
+│       └── zz_generated.deepcopy.go
 ├── bin
-│   └── manager
+│   └── controller-gen
 ├── config
-│   ├── certmanager
-│   │   ├── certificate.yaml
+│   ├── crd
 │   │   ├── kustomization.yaml
-│   │   └── kustomizeconfig.yaml
+│   │   ├── kustomizeconfig.yaml
+│   │   └── patches
+│   │       ├── cainjection_in_nodecontrollers.yaml
+│   │       └── webhook_in_nodecontrollers.yaml
 │   ├── default
 │   │   ├── kustomization.yaml
 │   │   ├── manager_auth_proxy_patch.yaml
-│   │   ├── manager_webhook_patch.yaml
-│   │   └── webhookcainjection_patch.yaml
+│   │   └── manager_config_patch.yaml
 │   ├── manager
+│   │   ├── controller_manager_config.yaml
 │   │   ├── kustomization.yaml
 │   │   └── manager.yaml
 │   ├── prometheus
@@ -74,25 +81,26 @@ init之后文件夹里面可以看到生成的文件
 │   │   └── monitor.yaml
 │   ├── rbac
 │   │   ├── auth_proxy_client_clusterrole.yaml
-│   │   ├── auth_proxy_role_binding.yaml
 │   │   ├── auth_proxy_role.yaml
+│   │   ├── auth_proxy_role_binding.yaml
 │   │   ├── auth_proxy_service.yaml
 │   │   ├── kustomization.yaml
-│   │   ├── leader_election_role_binding.yaml
 │   │   ├── leader_election_role.yaml
-│   │   └── role_binding.yaml
-│   └── webhook
-│       ├── kustomization.yaml
-│       ├── kustomizeconfig.yaml
-│       └── service.yaml
-├── Dockerfile
+│   │   ├── leader_election_role_binding.yaml
+│   │   ├── nodecontroller_editor_role.yaml
+│   │   ├── nodecontroller_viewer_role.yaml
+│   │   ├── role_binding.yaml
+│   │   └── service_account.yaml
+│   └── samples
+│       └── hllcontroller_v1_nodecontroller.yaml
+├── controllers
+│   ├── nodecontroller_controller.go
+│   └── suite_test.go
 ├── go.mod
 ├── go.sum
 ├── hack
 │   └── boilerplate.go.txt
-├── main.go
-├── Makefile
-└── PROJECT
+└── main.go
 ```
 
 - `config`：该文件夹包含了所有配置相关的文件，其中 `default` 文件夹包含标准配置启动控制器；`manager` 文件含有在集群中以 pod 的形式启动控制器的配置； 
@@ -308,7 +316,7 @@ func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 - `Reconcile` 实际上是对单个对象进行调谐。我们的 Request 只是有一个名字，我们可以使用 client 从缓存中获取这个对象。
 
-- 我们返回一个空的结果，没有错误，这就向 controller-runtime 表明我们已经成功地对这个对象进行了调谐，在有一些变化之前不需要再尝试调谐。
+  - 我们返回一个空的结果，没有错误，这就向 controller-runtime 表明我们已经成功地对这个对象进行了调谐，在有一些变化之前不需要再尝试调谐。
 - 大多数控制器需要一个日志句柄和一个上下文，所以我们在 Reconcile 中将他们初始化
   - 上下文是用来允许取消请求的，也或者是实现 tracing 等功能。它是所有 client 方法的第一个参数。`Background` 上下文只是一个基本的上下文，没有任何额外的数据或超时时间限制
   - runtime通过一个名为`logr`的库使用结构化的日志记录。日志记录的工作原理是将键值对附加到静态消息中。我们可以预先分配一些对，让这些键值对附加到这个调和器的所有日志行

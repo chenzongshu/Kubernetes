@@ -505,6 +505,14 @@ kubectl cluster-info dump --output-directory=/path/to/cluster-state   # 将当�
 kubectl taint nodes foo dedicated=special-user:NoSchedule
 ```
 
+## 驱逐节点
+
+```bash
+kubectl drain node1 --ignore-daemonsets --delete-local-data --force
+```
+
+
+
 ## 资源类型
 
 列出所支持的全部资源类型和它们的简称、[API 组](https://kubernetes.io/zh/docs/concepts/overview/kubernetes-api/#api-groups), 是否是[名字空间作用域](https://kubernetes.io/zh/docs/concepts/overview/working-with-objects/namespaces) 和 [Kind](https://kubernetes.io/zh/docs/concepts/overview/working-with-objects/kubernetes-objects)。

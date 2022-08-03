@@ -28,74 +28,23 @@ $ kubebuilder create api
 
 > 如果出现`which: no controller-gen`的错误，说明`$GOPATH/bin`不在`$PATH`环境变量中，此时将`$GOPATH/bin/controller-gen`程序放到`/bin/`目录即可，root用户的话是`/root/go/bin`
 
-然后创建api，注意：
-
-- `kind` 第一个字母必须大写
-- `group` 小写
-
-```bash
-$kubebuilder create api --group controller --version v1 --kind NodeController
-Create Resource [y/n]
-y
-Create Controller [y/n]
-y
-······
-/Users/chenzongshu/node-controller/bin/controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."
-Next: implement your new API and generate the manifests (e.g. CRDs,CRs) with:
-$ make manifests
-```
-
 ## init
 
 init之后文件夹里面可以看到生成的文件
 
 ```bash
-.
 ├── Dockerfile
 ├── Makefile
 ├── PROJECT
-├── api
-│   └── v1
-│       ├── groupversion_info.go
-│       ├── nodecontroller_types.go
-│       └── zz_generated.deepcopy.go
-├── bin
-│   └── controller-gen
 ├── config
-│   ├── crd
-│   │   ├── kustomization.yaml
-│   │   ├── kustomizeconfig.yaml
-│   │   └── patches
-│   │       ├── cainjection_in_nodecontrollers.yaml
-│   │       └── webhook_in_nodecontrollers.yaml
 │   ├── default
-│   │   ├── kustomization.yaml
-│   │   ├── manager_auth_proxy_patch.yaml
-│   │   └── manager_config_patch.yaml
+│   │   ├── ······
 │   ├── manager
-│   │   ├── controller_manager_config.yaml
-│   │   ├── kustomization.yaml
-│   │   └── manager.yaml
+│   │   ├── ······
 │   ├── prometheus
-│   │   ├── kustomization.yaml
-│   │   └── monitor.yaml
-│   ├── rbac
-│   │   ├── auth_proxy_client_clusterrole.yaml
-│   │   ├── auth_proxy_role.yaml
-│   │   ├── auth_proxy_role_binding.yaml
-│   │   ├── auth_proxy_service.yaml
-│   │   ├── kustomization.yaml
-│   │   ├── leader_election_role.yaml
-│   │   ├── leader_election_role_binding.yaml
-│   │   ├── nodecontroller_editor_role.yaml
-│   │   ├── nodecontroller_viewer_role.yaml
-│   │   ├── role_binding.yaml
-│   │   └── service_account.yaml
-│   └── samples
-│       └── hllcontroller_v1_nodecontroller.yaml
-├── controllers
-│   ├── nodecontroller_controller.go
-│   └── suite_test.go
+│   │   ├── ······
+│   └── rbac
+│       ├── ······
 ├── go.mod
 ├── go.sum
 ├── hack
@@ -201,11 +150,26 @@ func main() {
 }
 ```
 
-
-
 ## create api
 
-然后看看项目文件夹，主要多生成了下面3个文件夹
+然后创建api，注意：
+
+- `kind` 第一个字母必须大写
+- `group` 小写
+
+```bash
+$kubebuilder create api --group controller --version v1 --kind CronJob
+Create Resource [y/n]
+y
+Create Controller [y/n]
+y
+······
+/Users/chenzongshu/node-controller/bin/controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."
+Next: implement your new API and generate the manifests (e.g. CRDs,CRs) with:
+$ make manifests
+```
+
+看看项目文件夹，主要多生成了下面3个文件夹
 
 ```bash
 ├── api
@@ -225,14 +189,14 @@ func main() {
 │   └── suite_test.go
 ```
 
-其中 `cronjob_types.go` 和 `cronjob_controller.go` 是主要需要修改的文件
+其中 `_types.go` 和 `cronjob_controller.go` 是主要需要修改的文件
 
 ### cronjob_types.go
 
 ```go
 // 包含所有 Kubernetes 种类共有的元数据
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // CronJobSpec 定义了 CronJob 期待的状态
@@ -248,24 +212,24 @@ type CronJobStatus struct {
 
 // CronJob 是 cronjobs API 的 Schema
 type CronJob struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+    metav1.TypeMeta   `json:",inline"`
+    metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   CronJobSpec   `json:"spec,omitempty"`
-	Status CronJobStatus `json:"status,omitempty"`
+    Spec   CronJobSpec   `json:"spec,omitempty"`
+    Status CronJobStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 
 // CronJobList contains a list of CronJob
 type CronJobList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []CronJob `json:"items"`
+    metav1.TypeMeta `json:",inline"`
+    metav1.ListMeta `json:"metadata,omitempty"`
+    Items           []CronJob `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&CronJob{}, &CronJobList{})
+    SchemeBuilder.Register(&CronJob{}, &CronJobList{})
 }
 ```
 
@@ -288,38 +252,42 @@ controller-tools 中的 `object` 生成器也能够为每一个根类型以及�
 ```go
 // 基本的 reconciler 结构。几乎每一个调节器都需要记录日志，并且能够获取对象，所以可以直接使用
 type CronJobReconciler struct {
-	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+    client.Client
+    Log    logr.Logger
+    Scheme *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=batch.tutorial.kubebuilder.io,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch.tutorial.kubebuilder.io,resources=cronjobs/status,verbs=get;update;patch
 
 func (r *CronJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-	_ = r.Log.WithValues("cronjob", req.NamespacedName)
+    _ = context.Background()
+    _ = r.Log.WithValues("cronjob", req.NamespacedName)
 
-	// your logic here
+    // your logic here
 
-	return ctrl.Result{}, nil
+    return ctrl.Result{}, nil
 }
 // 将Reconcile 添加到 manager 中，这样当 manager 启动时它就会被启动
 func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&batchv1.CronJob{}).
-		Complete(r)
+    return ctrl.NewControllerManagedBy(mgr).
+        For(&batchv1.CronJob{}).
+        Complete(r)
 }
 ```
 
 最主要的逻辑就在 `Reconcile()` 函数中
 
 - `Reconcile` 实际上是对单个对象进行调谐。我们的 Request 只是有一个名字，我们可以使用 client 从缓存中获取这个对象。
-
+  
   - 我们返回一个空的结果，没有错误，这就向 controller-runtime 表明我们已经成功地对这个对象进行了调谐，在有一些变化之前不需要再尝试调谐。
+
 - 大多数控制器需要一个日志句柄和一个上下文，所以我们在 Reconcile 中将他们初始化
+  
   - 上下文是用来允许取消请求的，也或者是实现 tracing 等功能。它是所有 client 方法的第一个参数。`Background` 上下文只是一个基本的上下文，没有任何额外的数据或超时时间限制
   - runtime通过一个名为`logr`的库使用结构化的日志记录。日志记录的工作原理是将键值对附加到静态消息中。我们可以预先分配一些对，让这些键值对附加到这个调和器的所有日志行
+
+## webhook
 
 # 设计编码
 
@@ -527,7 +495,7 @@ func (r *CronJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 ```
 
 > 索引的作用？
->
+> 
 > 调谐器会获取 cronjob 下的所有 job 以更新它们状态。随着 cronjob 数量的增加，遍历全部 conjob 查找会变的相当低效。为了提高查询效率，这些任务会根据控制器名称建立索引。缓存后的 job 对象会 被添加上一个 jobOwnerKey 字段。这个字段引用其归属控制器和函数作为索引。在下文中，我们将配置 manager 作为这个字段的索引
 
 查找到所有的 job 后，将其归类为 active，successful，failed 三种类型，同时持续跟踪其 最新的执行情况以更新其状态。牢记，status 值应该是从实际的运行状态中实时获取。从 cronjob 中读取 job 的状态通常不是一个好做法。应该从每次执行状态中获取。我们后续也采用这种方法。
@@ -912,11 +880,4 @@ func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 一般情况下不需要修改，kubebuilder 已经自动添加了一个阻塞调用我们的 CornJob 控制器的 `SetupWithManager` 方法。
 
-
-
-
-
 # 安装&卸载
-
-
-

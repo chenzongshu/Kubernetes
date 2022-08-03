@@ -40,11 +40,11 @@ load-load.sh tar
 readonly new_repo=registry.cn-shenzhen.aliyuncs.com/kubespray_pub
 
 for image in $(docker images --format '{{.Repository}}:{{.Tag}}'); do
-	name=${image##*/}
-	new_img=${new_repo}/${name}
-	echo "Processing ${image} -> ${new_img}"
-	docker tag ${image} ${new_img}
-	docker push ${new_img}
+    name=${image##*/}
+    new_img=${new_repo}/${name}
+    echo "Processing ${image} -> ${new_img}"
+    docker tag ${image} ${new_img}
+    docker push ${new_img}
 done
 ```
 
@@ -170,8 +170,8 @@ kubectl get nodes --no-headers | awk '{print $1}' | xargs -I {} sh -c 'echo -n "
 示例输出：
 
 ```bash
-10.0.0.2	3040m(77%)
-10.0.0.3	300m(7%)
+10.0.0.2    3040m(77%)
+10.0.0.3    300m(7%)
 ```
 
 # 线程数排名统计
@@ -183,7 +183,7 @@ printf "    NUM  PID\t\tCOMMAND\n" && ps -eLf | awk '{$1=null;$3=null;$4=null;$5
 示例输出:
 
 ```bash
-    NUM  PID		COMMAND
+    NUM  PID        COMMAND
     594  14418        java -server -Dspring.profiles.active=production -Xms2048M -Xmx2048M -Xss256k -Dinfo.app.version=33 -XX:+UseG1GC -XX:+UseStringDeduplication -XX:+PrintGCDateStamps -verbosegc -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.port=10011 -Xloggc:/home/log/gather-server/gather-server-gac.log -Ddefault.client.encoding=UTF-8 -Dfile.encoding=UTF-8 -Dlogging.path=/home/log/gather-server -Dserver.tomcat.accesslog.directory=/home/log/gather-server -jar /home/app/gather-server.jar --server.port=8080 --management.port=10086
     449  7088        java -server -Dspring.profiles.active=production -Dspring.cloud.config.token=nLfe-bQ0CcGnNZ_Q4Pt9KTizgRghZrGUVVqaDZYHU3R-Y_-U6k7jkm8RrBn7LPJD -Xms4256M -Xmx4256M -Xss256k -XX:+PrintFlagsFinal -XX:+UseG1GC -XX:+UseStringDeduplication -XX:MaxGCPauseMillis=200 -XX:MetaspaceSize=128M -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.port=10011 -verbosegc -XX:+PrintGCDateStamps -XX:+UseGCLogFileRotation -XX:NumberOfGCLogFiles=15 -XX:GCLogFileSize=50M -XX:AutoBoxCacheMax=520 -Xloggc:/home/log/oauth-server/oauth-server-gac.log -Dinfo.app.version=12 -Ddefault.client.encoding=UTF-8 -Dfile.encoding=UTF-8 -Dlogging.config=classpath:log4j2-spring-prod.xml -Dlogging.path=/home/log/oauth-server -Dserver.tomcat.accesslog.directory=/home/log/oauth-server -jar /home/app/oauth-server.jar --server.port=8080 --management.port=10086 --zuul.server.netty.threads.worker=14 --zuul.server.netty.socket.epoll=true
 .......
@@ -511,8 +511,6 @@ kubectl taint nodes foo dedicated=special-user:NoSchedule
 kubectl drain node1 --ignore-daemonsets --delete-local-data --force
 ```
 
-
-
 ## 资源类型
 
 列出所支持的全部资源类型和它们的简称、[API 组](https://kubernetes.io/zh/docs/concepts/overview/kubernetes-api/#api-groups), 是否是[名字空间作用域](https://kubernetes.io/zh/docs/concepts/overview/working-with-objects/namespaces) 和 [Kind](https://kubernetes.io/zh/docs/concepts/overview/working-with-objects/kubernetes-objects)。
@@ -536,16 +534,16 @@ kubectl api-resources --api-group=extensions # "extensions" API 组中的所有�
 
 要以特定格式将详细信息输出到终端窗口，将 `-o`（或者 `--output`）参数添加到支持的 `kubectl` 命令中。
 
-| 输出格式                            | 描述                                                         |
-| ----------------------------------- | ------------------------------------------------------------ |
-| `-o=custom-columns=<spec>`          | 使用逗号分隔的自定义列来打印表格                             |
-| `-o=custom-columns-file=<filename>` | 使用 `<filename>` 文件中的自定义列模板打印表格               |
-| `-o=json`                           | 输出 JSON 格式的 API 对象                                    |
-| `-o=jsonpath=<template>`            | 打印 [jsonpath](https://kubernetes.io/zh/docs/reference/kubectl/jsonpath) 表达式中定义的字段 |
+| 输出格式                                | 描述                                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `-o=custom-columns=<spec>`          | 使用逗号分隔的自定义列来打印表格                                                                                        |
+| `-o=custom-columns-file=<filename>` | 使用 `<filename>` 文件中的自定义列模板打印表格                                                                          |
+| `-o=json`                           | 输出 JSON 格式的 API 对象                                                                                      |
+| `-o=jsonpath=<template>`            | 打印 [jsonpath](https://kubernetes.io/zh/docs/reference/kubectl/jsonpath) 表达式中定义的字段                       |
 | `-o=jsonpath-file=<filename>`       | 打印在 `<filename>` 文件中定义的 [jsonpath](https://kubernetes.io/zh/docs/reference/kubectl/jsonpath) 表达式所指定的字段。 |
-| `-o=name`                           | 仅打印资源名称而不打印其他内容                               |
-| `-o=wide`                           | 以纯文本格式输出额外信息，对于 Pod 来说，输出中包含了节点名称 |
-| `-o=yaml`                           | 输出 YAML 格式的 API 对象                                    |
+| `-o=name`                           | 仅打印资源名称而不打印其他内容                                                                                         |
+| `-o=wide`                           | 以纯文本格式输出额外信息，对于 Pod 来说，输出中包含了节点名称                                                                       |
+| `-o=yaml`                           | 输出 YAML 格式的 API 对象                                                                                      |
 
 使用 `-o=custom-columns` 的示例：
 
@@ -566,17 +564,17 @@ kubectl get pods -A -o=custom-columns='DATA:metadata.*'
 
 Kubectl 日志输出详细程度是通过 `-v` 或者 `--v` 来控制的，参数后跟一个数字表示日志的级别。 Kubernetes 通用的日志习惯和相关的日志级别在 [这里](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md) 有相应的描述。
 
-| 详细程度 | 描述                                                         |
-| -------- | ------------------------------------------------------------ |
-| `--v=0`  | 用于那些应该 *始终* 对运维人员可见的信息，因为这些信息一般很有用。 |
-| `--v=1`  | 如果您不想要看到冗余信息，此值是一个合理的默认日志级别。     |
-| `--v=2`  | 输出有关服务的稳定状态的信息以及重要的日志消息，这些信息可能与系统中的重大变化有关。这是建议大多数系统设置的默认日志级别。 |
-| `--v=3`  | 包含有关系统状态变化的扩展信息。                             |
-| `--v=4`  | 包含调试级别的冗余信息。                                     |
-| `--v=6`  | 显示所请求的资源。                                           |
-| `--v=7`  | 显示 HTTP 请求头。                                           |
-| `--v=8`  | 显示 HTTP 请求内容。                                         |
-| `--v=9`  | 显示 HTTP 请求内容而且不截断内容。                           |
+| 详细程度    | 描述                                                            |
+| ------- | ------------------------------------------------------------- |
+| `--v=0` | 用于那些应该 *始终* 对运维人员可见的信息，因为这些信息一般很有用。                           |
+| `--v=1` | 如果您不想要看到冗余信息，此值是一个合理的默认日志级别。                                  |
+| `--v=2` | 输出有关服务的稳定状态的信息以及重要的日志消息，这些信息可能与系统中的重大变化有关。这是建议大多数系统设置的默认日志级别。 |
+| `--v=3` | 包含有关系统状态变化的扩展信息。                                              |
+| `--v=4` | 包含调试级别的冗余信息。                                                  |
+| `--v=6` | 显示所请求的资源。                                                     |
+| `--v=7` | 显示 HTTP 请求头。                                                  |
+| `--v=8` | 显示 HTTP 请求内容。                                                 |
+| `--v=9` | 显示 HTTP 请求内容而且不截断内容。                                          |
 
 # 给Service配置port-forward代理
 
@@ -605,4 +603,3 @@ kubectl get ns test -o json > test.json
 ```
 kubectl replace --raw "/api/v1/namespaces/test/finalize" -f ./test.json
 ```
-

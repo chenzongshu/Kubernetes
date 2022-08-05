@@ -620,3 +620,31 @@ do
   done
 done
 ```
+
+# nodegroup cordon/uncordon
+
+选出 节点组 并且 不包含 标签 temp-sts=true的节点上，执行 drain 排水
+
+```bash
+#!/bin/bash
+
+## drain the node 
+for nodes in `kubectl get nodes -l 'eks.amazonaws.com/nodegroup in (cluster-pre,cluster-pre-docker-fix2), temp-sts!=true'|awk 'NR == 1 {next} {print $1}'`
+do
+   kubectl drain $nodes --ignore-daemonsets --delete-local-data --force
+   echo " the node $nodes drain "
+done
+```
+
+
+
+```bash
+#!/bin/bash
+
+## label the node unschedulable ##
+for nodes in `kubectl get nodes -l 'eks.amazonaws.com/nodegroup in (az-a)'|awk 'NR == 1 {next} {print $1}'`
+do
+   kubectl uncordon $nodes
+   echo " the node $nodes uncordon "
+done
+```

@@ -603,3 +603,20 @@ kubectl get ns test -o json > test.json
 ```
 kubectl replace --raw "/api/v1/namespaces/test/finalize" -f ./test.json
 ```
+
+
+
+# 指定ns的所有deployment副本数改为0
+
+```bash
+#!/bin/bash
+nss=(prd-msa prd-php)
+for ns in ${nss[@]}
+do
+  echo "**************** namespace [$ns]  *********************"
+  for deploy in `kubectl -n $ns get deploy |awk 'NR == 1 {next} {print $1}'`
+  do
+    kubectl -n $ns scale deploy $deploy --replicas=0
+  done
+done
+```

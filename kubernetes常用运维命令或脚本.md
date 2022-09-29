@@ -610,8 +610,53 @@ kubectl get ns test -o json > test.json
 kubectl replace --raw "/api/v1/namespaces/test/finalize" -f ./test.json
 ```
 
+
+
 # 判断deployment的Pod数量是否为奇数个
 
 ```bash
  kubectl -n prd-php get deploy|awk 'NR == 1 {next} {print $2}'|awk {'split($1,arr,"/");print arr[1]'}|awk '{if ($0%2==1) print $0}'
+=======
+
+
+# 指定ns的所有deployment副本数改为0
+
+```bash
+#!/bin/bash
+nss=(prd-msa prd-php)
+for ns in ${nss[@]}
+do
+  echo "**************** namespace [$ns]  *********************"
+  for deploy in `kubectl -n $ns get deploy |awk 'NR == 1 {next} {print $1}'`
+  do
+    kubectl -n $ns scale deploy $deploy --replicas=0
+  done
+done
+```
+
+# nodegroup cordon/uncordon
+
+选出 节点组 并且 不包含 标签 temp-sts=true的节点上，执行 drain 排水
+
+```bash
+#!/bin/bash
+
+## drain the node 
+for nodes in `kubectl get nodes -l 'eks.amazonaws.com/nodegroup in (cluster-pre,cluster-pre-docker-fix2), temp-sts!=true'|awk 'NR == 1 {next} {print $1}'`
+do
+   kubectl drain $nodes --ignore-daemonsets --delete-local-data --force
+   echo " the node $nodes drain "
+done
+```
+
+```bash
+#!/bin/bash
+
+## label the node unschedulable ##
+for nodes in `kubectl get nodes -l 'eks.amazonaws.com/nodegroup in (az-a)'|awk 'NR == 1 {next} {print $1}'`
+do
+   kubectl uncordon $nodes
+   echo " the node $nodes uncordon "
+done
+
 ```

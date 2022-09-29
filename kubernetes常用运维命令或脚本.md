@@ -350,6 +350,9 @@ kubectl get configmap myconfig \
 # 获取所有工作节点（使用选择器以排除标签名称为 'node-role.kubernetes.io/master' 的结果）
 kubectl get node --selector='!node-role.kubernetes.io/master'
 
+# 获取工作节点，并按照创建时间排序
+kubectl get nodes --sort-by=.metadata.creationTimestamp
+
 # 获取当前命名空间中正在运行的 Pods
 kubectl get pods --field-selector=status.phase=Running
 
@@ -503,6 +506,9 @@ kubectl cluster-info dump --output-directory=/path/to/cluster-state   # 将当�
 
 # 如果已存在具有指定键和效果的污点，则替换其值为指定值。
 kubectl taint nodes foo dedicated=special-user:NoSchedule
+
+# 按照节点创建的时间排序
+kubectl get nodes --sort-by=.metadata.creationTimestamp
 ```
 
 ## 驱逐节点
@@ -602,4 +608,10 @@ kubectl get ns test -o json > test.json
 
 ```
 kubectl replace --raw "/api/v1/namespaces/test/finalize" -f ./test.json
+```
+
+# 判断deployment的Pod数量是否为奇数个
+
+```bash
+ kubectl -n prd-php get deploy|awk 'NR == 1 {next} {print $2}'|awk {'split($1,arr,"/");print arr[1]'}|awk '{if ($0%2==1) print $0}'
 ```

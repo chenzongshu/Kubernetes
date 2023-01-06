@@ -75,6 +75,16 @@ docker rmi `docker images --format '{{.Repository}}:{{.Tag}}'| grep xxxxx`
 docker rmi `docker images -q`
 ```
 
+# 批量删除Pod
+
+```bash
+# grep之后过滤掉了第一行； awk是打印第一列； xargs和sed是多行变一列
+kubectl delete po `kubectl get po|grep consul|awk '{print $1}'|xargs|sed 's/\n/,/g'`
+
+# 如果去掉第一行
+kubectl delete po `kubectl get po|grep consul|awk 'NR == 1 {next} {print $1}'|xargs|sed 's/\n/,/g'`
+```
+
 # 清理非 Running 的 pod
 
 ```
@@ -505,7 +515,7 @@ kubectl cluster-info dump                                             # 将当�
 kubectl cluster-info dump --output-directory=/path/to/cluster-state   # 将当前集群状态输出到 /path/to/cluster-state
 
 # 如果已存在具有指定键和效果的污点，则替换其值为指定值。
-kubectl taint nodes foo dedicated=special-user:NoSchedule
+kubectl taint nodes <node1> dedicated=special-user:NoSchedule
 
 # 按照节点创建的时间排序
 kubectl get nodes --sort-by=.metadata.creationTimestamp
@@ -610,8 +620,6 @@ kubectl get ns test -o json > test.json
 kubectl replace --raw "/api/v1/namespaces/test/finalize" -f ./test.json
 ```
 
-
-
 # 判断deployment的Pod数量是否为奇数个
 
 ```bash
@@ -658,5 +666,62 @@ do
    kubectl uncordon $nodes
    echo " the node $nodes uncordon "
 done
-
 ```
+
+# 查看证书
+
+```bash
+openssl x509 -in /etc/kubernetes/ssl/ca.pem -text -noout
+```
+
+# 自定义输出列
+
+```bash
+kubectl get deploy test -n test --output=custom-columns="NAME:.metadata.name,NUMS:.spec.replicas,CPU:.spec.template.spec.containers[*].resources.limits.cpu,MEM:.spec.template.spec.containers[*].resources.limits.memory"
+```
+
+# 宿主机登录进入Pod抓包
+
+```bash
+1 可以先执行kubectl get pods $PodName -n $NameSpace -o wide看看pod运行的节点
+2 登录到对应的node上，执行 docker ps|grep $pod名称找到容器ID，然后在执行 docker inspect -f {{.State.Pid}} 容器id 找到容器的进程pid
+3 执行yum -y install util-linux.x86_64 安装下 nsenter工具，然后执行 nsenter --target 容器pid -n 之后进入到容器的网络名称空间，tcpdump -i eth0 host ip地址 and port 端口 -s 0 -C 40 -W 50 -w //tmp/1.pcap
+```
+
+# 查看Pod 宿主机CPU绑核
+
+先找到Pod在宿主机对应的PID
+
+```bash
+1、可以先执行kubectl get pods $PodName -n $NameSpace -o wide看看pod运行的节点
+2、登录到对应的node上，执行 docker ps|grep $pod名称找到容器ID，
+3、然后在执行 docker inspect -f {{.State.Pid}} 容器id 找到容器的进程pid
+```
+
+方法1：
+
+```bash
+taskset -p 2643681
+pid 2643681's current affinity mask: ff
+```
+
+方法2：
+
+```bash
+cat /proc/{PID}/status
+
+Cpus_allowed:    ff
+Cpus_allowed_list:    0-7
+```
+
+其中 Cpus_allowed_list 就是可以运行的核数的
+
+方法3：
+
+```bash
+ps -o pid,psr,comm -p {pid}
+```
+
+方法4：
+
+安装htop，执行，然后按F2，选择columns，在“available columns”下面添加PRCESSOR，然后按F10保存，第一列就多了一个CPU列出来

@@ -10,7 +10,7 @@
 
 Job/CronJob 很好理解，执行的时间也可控
 
-但是Deployment的执行时间？
+
 
 ## How
 

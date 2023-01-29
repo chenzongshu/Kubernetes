@@ -63,11 +63,11 @@ https://v1-21.docs.kubernetes.io/docs/reference/generated/kubernetes-api/v1.21/
 client-go 在集群内，如果用 `rest.InClusterConfig()` ，使用SA的token，默认default是挂载 Pod at the `/var/run/secrets/kubernetes.io/serviceaccount` 位置
 
 ```go
-	// creates the in-cluster config
-	config, err := rest.InClusterConfig()
-	if err != nil {
-		panic(err.Error())
-	}
+    // creates the in-cluster config
+    config, err := rest.InClusterConfig()
+    if err != nil {
+        panic(err.Error())
+    }
 ```
 
 ## 集群外
@@ -75,24 +75,21 @@ client-go 在集群内，如果用 `rest.InClusterConfig()` ，使用SA的token�
 使用外部kubeconfig文件
 
 ```go
-	// 配置 k8s 集群外 kubeconfig 配置文件，默认位置 $HOME/.kube/config
-	var kubeconfig *string
-	if home := homeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-	flag.Parse()
+    // 配置 k8s 集群外 kubeconfig 配置文件，默认位置 $HOME/.kube/config
+    var kubeconfig *string
+    if home := homeDir(); home != "" {
+        kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+    } else {
+        kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+    }
+    flag.Parse()
 
-	//在 kubeconfig 中使用当前上下文环境，config 获取支持 url 和 path 方式
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
-	if err != nil {
-		panic(err.Error())
-	}
-
+    //在 kubeconfig 中使用当前上下文环境，config 获取支持 url 和 path 方式
+    config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+    if err != nil {
+        panic(err.Error())
+    }
 ```
-
-
 
 # Demo
 
@@ -108,47 +105,46 @@ go mod init cgtest
 package main
 
 import (
-	"flag"
-	"fmt"
-	"log"
-	"os"
-	"path/filepath"
+    "flag"
+    "fmt"
+    "log"
+    "os"
+    "path/filepath"
         "context"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    "k8s.io/client-go/kubernetes"
+    "k8s.io/client-go/tools/clientcmd"
 )
 
 func main() {
-	var ns string
-	flag.StringVar(&ns, "namespace", "", "namespace")
+    var ns string
+    flag.StringVar(&ns, "namespace", "", "namespace")
 
-	// Bootstrap k8s configuration from local 	Kubernetes config file
-	kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
-	log.Println("Using kubeconfig file: ", kubeconfig)
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		log.Fatal(err)
-	}
+    // Bootstrap k8s configuration from local     Kubernetes config file
+    kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
+    log.Println("Using kubeconfig file: ", kubeconfig)
+    config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+    if err != nil {
+        log.Fatal(err)
+    }
 
-	// Create an rest client not targeting specific API version
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Fatal(err)
-	}
+    // Create an rest client not targeting specific API version
+    clientset, err := kubernetes.NewForConfig(config)
+    if err != nil {
+        log.Fatal(err)
+    }
 
-	pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		log.Fatalln("failed to get pods:", err)
-	}
+    pods, err := clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
+    if err != nil {
+        log.Fatalln("failed to get pods:", err)
+    }
 
-	// print pods
-	for i, pod := range pods.Items {
-		fmt.Printf("[%d] %s\n", i, pod.GetName())
-	}
+    // print pods
+    for i, pod := range pods.Items {
+        fmt.Printf("[%d] %s\n", i, pod.GetName())
+    }
 }
-
 ```
 
 然后执行
@@ -163,12 +159,11 @@ go run main.go
 go: found golang.org/x/oauth2 in golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 # k8s.io/client-go/rest
 ../pkg/mod/k8s.io/client-go@v11.0.0+incompatible/rest/request.go:598:31: not enough arguments in call to watch.NewStreamWatcher
-	have (*versioned.Decoder)
-	want (watch.Decoder, watch.Reporter)
+    have (*versioned.Decoder)
+    want (watch.Decoder, watch.Reporter)
 # k8s.io/client-go/tools/clientcmd/api/v1
 ../pkg/mod/k8s.io/client-go@v11.0.0+incompatible/tools/clientcmd/api/v1/conversion.go:29:15: scheme.AddConversionFuncs undefined (type *runtime.Scheme has no field or method AddConversionFuncs)
 ../pkg/mod/k8s.io/client-go@v11.0.0+incompatible/tools/clientcmd/api/v1/conversion.go:31:12: s.DefaultConvert undefined (type conversion.Scope has no field or method DefaultConvert)
-
 ```
 
 修改`go.mod`
@@ -199,6 +194,3 @@ require (
 [11] kube-scheduler-k8s-master
 [12] ks-installer-848b4d7c9c-gw5wb
 ```
-
-
-

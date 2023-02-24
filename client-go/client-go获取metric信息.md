@@ -6,8 +6,6 @@
 
 # API信息查询
 
-
-
 ```bash
 # all node metrics; type []NodeMetrics
 /apis/metrics.k8s.io/v1beta1/nodes
@@ -139,64 +137,63 @@ var podMetrics models.PodMetricsList
 package main
 
 import (
-	"context"
-	"flag"
-	"fmt"
-	"path/filepath"
+    "context"
+    "flag"
+    "fmt"
+    "path/filepath"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
-	metrics "k8s.io/metrics/pkg/client/clientset/versioned"
+    metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    "k8s.io/client-go/kubernetes"
+    "k8s.io/client-go/tools/clientcmd"
+    "k8s.io/client-go/util/homedir"
+    metrics "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 func main() {
-	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-	flag.Parse()
+    var kubeconfig *string
+    if home := homedir.HomeDir(); home != "" {
+        kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+    } else {
+        kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+    }
+    flag.Parse()
 
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
-	if err != nil {
-		panic(err.Error())
-	}
+    config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+    if err != nil {
+        panic(err.Error())
+    }
 
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		panic(err.Error())
-	}
+    clientset, err := kubernetes.NewForConfig(config)
+    if err != nil {
+        panic(err.Error())
+    }
 
-	nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		panic(err)
-	}
-	for _, nds := range nodes.Items {
-		fmt.Printf("NodeName: %s\n", nds.Name)
-	}
+    nodes, err := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+    if err != nil {
+        panic(err)
+    }
+    for _, nds := range nodes.Items {
+        fmt.Printf("NodeName: %s\n", nds.Name)
+    }
 
-	mc, err := metrics.NewForConfig(config)
-	if err != nil {
-		panic(err)
-	}
+    mc, err := metrics.NewForConfig(config)
+    if err != nil {
+        panic(err)
+    }
 
-	nodeMetrics, err := mc.MetricsV1beta1().NodeMetricses().List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
+    nodeMetrics, err := mc.MetricsV1beta1().NodeMetricses().List(context.TODO(), metav1.ListOptions{})
+    if err != nil {
+        fmt.Println("Error:", err)
+        return
+    }
 
-	for _, nodeMetric := range nodeMetrics.Items {
-		nodeCPU := nodeMetric.Usage.Cpu()
-		nodeMem := nodeMetric.Usage.Memory()
-		fmt.Println("**************")
-		fmt.Println("node: ", nodeMetric.Name)
-		fmt.Println("node CPU：", nodeCPU)
-		fmt.Println("node MEM：", nodeMem)
-	}
+    for _, nodeMetric := range nodeMetrics.Items {
+        nodeCPU := nodeMetric.Usage.Cpu()
+        nodeMem := nodeMetric.Usage.Memory()
+        fmt.Println("**************")
+        fmt.Println("node: ", nodeMetric.Name)
+        fmt.Println("node CPU：", nodeCPU)
+        fmt.Println("node MEM：", nodeMem)
+    }
 }
 ```
-

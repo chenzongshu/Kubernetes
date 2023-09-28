@@ -10,10 +10,10 @@
 
 ```go
 const (
-	JSONPatchType           PatchType = "application/json-patch+json"
-	MergePatchType          PatchType = "application/merge-patch+json"
-	StrategicMergePatchType PatchType = "application/strategic-merge-patch+json"
-	ApplyPatchType          PatchType = "application/apply-patch+yaml"
+    JSONPatchType           PatchType = "application/json-patch+json"
+    MergePatchType          PatchType = "application/merge-patch+json"
+    StrategicMergePatchType PatchType = "application/strategic-merge-patch+json"
+    ApplyPatchType          PatchType = "application/apply-patch+yaml"
 )
 ```
 
@@ -82,7 +82,7 @@ kubectl patch deployment/foo -p \
 type PodSpec struct {
   ...
   Containers []Container `json:"containers" patchStrategy:"merge" patchMergeKey:"name" ...`
-  
+
   Tolerations []Toleration `json:"tolerations,omitempty" protobuf:"bytes,22,opt,name=tolerations"`
   ...
 }
@@ -112,41 +112,41 @@ server-side apply是k8s v1.18以上的特性。什么是Server-side Apply呢？�
 
 ```go
 func creatClient() {
-	var config *rest.Config
-	var err error
-	var kubeconfig *string
-	if env == "in-cluster" {
-		// creates the in-cluster config
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			panic(err.Error())
-		}
-		// creates the clientset
-		clientset, err = kubernetes.NewForConfig(config)
-		if err != nil {
-			panic(err.Error())
-		}
-		// return clientset, metricset
-	} else {
-		if home := homedir.HomeDir(); home != "" {
-			kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-		} else {
-			kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-		}
-		flag.Parse()
+    var config *rest.Config
+    var err error
+    var kubeconfig *string
+    if env == "in-cluster" {
+        // creates the in-cluster config
+        config, err = rest.InClusterConfig()
+        if err != nil {
+            panic(err.Error())
+        }
+        // creates the clientset
+        clientset, err = kubernetes.NewForConfig(config)
+        if err != nil {
+            panic(err.Error())
+        }
+        // return clientset, metricset
+    } else {
+        if home := homedir.HomeDir(); home != "" {
+            kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+        } else {
+            kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+        }
+        flag.Parse()
 
-		// use the current context in kubeconfig
-		config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
-		if err != nil {
-			panic(err.Error())
-		}
+        // use the current context in kubeconfig
+        config, err = clientcmd.BuildConfigFromFlags("", *kubeconfig)
+        if err != nil {
+            panic(err.Error())
+        }
 
-		clientset, err = kubernetes.NewForConfig(config)
-		if err != nil {
-			panic(err.Error())
-		}
-		// return clientset, metricset
-	}
+        clientset, err = kubernetes.NewForConfig(config)
+        if err != nil {
+            panic(err.Error())
+        }
+        // return clientset, metricset
+    }
 }
 ```
 
@@ -156,38 +156,38 @@ func creatClient() {
 
 ```go
 type patchStringValue struct {
-	Op    string `json:"op"`
-	Path  string `json:"path"`
-	Value bool   `json:"value"`
+    Op    string `json:"op"`
+    Path  string `json:"path"`
+    Value bool   `json:"value"`
 }
 
 func NodeCordon(ctx context.Context, client *kubernetes.Clientset, node *v1.Node) error {
-	payload := []patchStringValue{{
-		Op:    "replace",
-		Path:  "/spec/unschedulable",
-		Value: true,
-	}}
-	payloadBytes, _ := json.Marshal(payload)
-	_, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
-	if err != nil {
-		klog.InfoS("Node ", node.Name, " [NodeCordon()] have error: ", err)
-	}
-	return err
+    payload := []patchStringValue{{
+        Op:    "replace",
+        Path:  "/spec/unschedulable",
+        Value: true,
+    }}
+    payloadBytes, _ := json.Marshal(payload)
+    _, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
+    if err != nil {
+        klog.InfoS("Node ", node.Name, " [NodeCordon()] have error: ", err)
+    }
+    return err
 }
 
 
 func UnNodeCordon(ctx context.Context, client *kubernetes.Clientset, node *v1.Node) error {
-	payload := []patchStringValue{{
-		Op:    "replace",
-		Path:  "/spec/unschedulable",
-		Value: false,
-	}}
-	payloadBytes, _ := json.Marshal(payload)
-	_, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
-	if err != nil {
-		klog.ErrorS(err, "[UnNodeCordon()] have error: ", "node:", node.Name)
-	}
-	return err
+    payload := []patchStringValue{{
+        Op:    "replace",
+        Path:  "/spec/unschedulable",
+        Value: false,
+    }}
+    payloadBytes, _ := json.Marshal(payload)
+    _, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
+    if err != nil {
+        klog.ErrorS(err, "[UnNodeCordon()] have error: ", "node:", node.Name)
+    }
+    return err
 }
 ```
 
@@ -197,22 +197,22 @@ func UnNodeCordon(ctx context.Context, client *kubernetes.Clientset, node *v1.No
 
 ```go
 type patchLabelValue struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value"`
+    Op    string      `json:"op"`
+    Path  string      `json:"path"`
+    Value interface{} `json:"value"`
 }
 
 func AddLabelNodeScheduler(ctx context.Context, client *kubernetes.Clientset, node *v1.Node) error {
-	payload := []patchLabelValue{{
-		Op:    "add",
-		Path:  "/metadata/labels/hll-descheduler",
-		Value: "true",
-	}}
+    payload := []patchLabelValue{{
+        Op:    "add",
+        Path:  "/metadata/labels/hll-descheduler",
+        Value: "true",
+    }}
 
-	payloadBytes, _ := json.Marshal(payload)
-	_, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
+    payloadBytes, _ := json.Marshal(payload)
+    _, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
 
-	return err
+    return err
 }
 ```
 
@@ -236,14 +236,14 @@ func AddLabelNodeScheduler(ctx context.Context, client *kubernetes.Clientset, no
 
 ```go
 func RemoveLabelNodeScheduler(ctx context.Context, client *kubernetes.Clientset, node *v1.Node) error {
-	payload := []patchLabelValue{{
-		Op:    "remove",
-		Path:  "/metadata/labels/hll-descheduler",
-		Value: "true",
-	}}
-	payloadBytes, _ := json.Marshal(payload)
-	_, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
-	return err
+    payload := []patchLabelValue{{
+        Op:    "remove",
+        Path:  "/metadata/labels/hll-descheduler",
+        Value: "true",
+    }}
+    payloadBytes, _ := json.Marshal(payload)
+    _, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
+    return err
 }
 ```
 
@@ -305,20 +305,270 @@ func RemoveLabelOffNode(c clientset.Interface, nodeName string, labelKeys []stri
 
 ```go
 func getNodePods(client k8sClient.Interface, node v1.Node) (*v1.PodList, error) {
-	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name +
-		",status.phase!=" + string(v1.PodSucceeded) +
-		",status.phase!=" + string(v1.PodFailed))
+    fieldSelector, err := fields.ParseSelector("spec.nodeName=" + node.Name +
+        ",status.phase!=" + string(v1.PodSucceeded) +
+        ",status.phase!=" + string(v1.PodFailed))
 
-	if err != nil {
-		return nil, err
-	}
+    if err != nil {
+        return nil, err
+    }
 
-	return client.CoreV1().Pods(v1.NamespaceAll).List(context.TODO(), metaV1.ListOptions{
-		FieldSelector: fieldSelector.String(),
-	})
+    return client.CoreV1().Pods(v1.NamespaceAll).List(context.TODO(), metaV1.ListOptions{
+        FieldSelector: fieldSelector.String(),
+    })
 }
 ```
 
-# 
+## 节点操作annotation
+
+### 新增
+
+和上面操作label类似
+
+```go
+	payload := []patchLabelValue{{
+		Op:    "add",
+		Path:  "/metadata/annotations/{key}",  //key-value是annotation要填写的值
+		Value: "{value}",
+	}}
+
+	payloadBytes, _ := json.Marshal(payload)
+	_, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
+	if err != nil {
+		klog.ErrorS(err, "return error: ", "node:", node.Name)
+	}
+```
+
+### 删除
+
+```go
+	payload := []patchLabelValue{{
+		Op:    "remove",
+		Path:  "/metadata/annotations/{key}",  //key-value是annotation要填写的值
+		Value: "{value}",
+	}}
+
+	payloadBytes, _ := json.Marshal(payload)
+	_, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, payloadBytes, metav1.PatchOptions{})
+	if err != nil {
+		klog.ErrorS(err, "return error: ", "node:", node.Name)
+	}
+```
 
 
+
+# Informer
+
+有各种类型： `NewInformer`、`NewIndexInfomer`、`NewShareInformer` 、`NewShareIndexInformer`  和 `NewSharedInformerFactoryWithOptions`
+
+## 前置基础
+
+Controller或者client-go这个SDK里面，涉及到的概念有
+
+- Reflector(反射器) 通过 http trunk 协议监听 K8s apiserver 服务的资源变更事件 , 事件主要分为三个动作 `ADD`、`UPDATE`、`DELETE`；
+
+- Reflector(反射器) 将事件添加到 Delta 队列中等待；
+
+- Informer 从队列获取新的事件；
+
+- Informer 调用 Indexer (索引器 , 该索引器内包含 Store 对象), 默认索引器是以 namespace 和 name 作为每种资源的索引名；
+
+- Indexer 通过调用 Store 存储对象按资源分类存储；
+
+## NewInformer
+
+Informer 会向我们返回两个对象：`Store` 和 `Controller`。其中，Controller 主要用于控制监听事件的循环过程，而 Store 对象实际上与之前所讲的内容相同，我们可以直接从本地缓存中获取我们所监听的资源。
+
+```go
+...
+func main () {
+        cliset := config.NewK8sConfig().InitClient()
+        // 获取configmap
+        listWatcher := cache.NewListWatchFromClient(
+                cliset.CoreV1().RESTClient(),
+                "configmaps",
+                "default",
+                fields.Everything(),
+        )
+        // CmdHandler 和上述的 EventHandler (参考 3.3.5)
+        store, controller := cache.NewInformer(listWatcher, &v1.ConfigMap{}, 0, &CmdHandler{})
+        // 开启一个goroutine 避免主线程堵塞
+        go controller.Run(wait.NeverStop)
+        // 等待3秒 同步缓存
+        time.Sleep(3 * time.Second)
+        // 从缓存中获取监听到的 configmap 资源
+        fmt.Println(store.List())
+
+}
+
+// Output:
+// Add:  kube-root-ca.crt
+// Add:  istio-ca-root-cert
+// [... configmap 对象]
+```
+
+## NewIndexInfomer
+
+在 NewInformer 基础上接收 Indexer
+
+```go
+import (
+    "fmt"
+    "k8s-clientset/config"
+    "k8s.io/api/core/v1"
+    "k8s.io/apimachinery/pkg/api/meta"
+    "k8s.io/apimachinery/pkg/fields"
+    "k8s.io/apimachinery/pkg/util/wait"
+    "k8s.io/client-go/tools/cache"
+    "time"
+)
+
+...
+
+// LabelsIndexFunc 用作给出可检索的索引值
+func LabelsIndexFunc(obj interface{}) ([]string, error) {
+        metaD, err := meta.Accessor(obj)
+        if err != nil {
+                return []string{""}, fmt.Errorf("object has no meta: %v", err)
+        }
+        return []string{metaD.GetLabels()["app"]}, nil
+}
+
+func main () {
+        cliset := config.NewK8sConfig().InitClient()
+        // 获取configmap
+        listWatcher := cache.NewListWatchFromClient(
+                cliset.CoreV1().RESTClient(),
+                "configmaps",
+                "default",
+                fields.Everything(),
+        )
+        // 创建索引其并指定名字
+        myIndexer := cache.Indexers{"app": LabelsIndexFunc}
+        // CmdHandler 和上述的 EventHandler (参考 3.3.5)
+        i, c := cache.NewIndexerInformer(listWatcher, &v1.Pod{}, 0, &CmdHandler{}, myIndexer)
+        // 开启一个goroutine 避免主线程堵塞
+        go controller.Run(wait.NeverStop)
+        // 等待3秒 同步缓存
+        time.Sleep(3 * time.Second)
+        // 通过 IndexStore 指定索引器获取我们需要的索引值
+        // busy-box 索引值是由于 在某个 pod 上打了一个 label 为 app: busy-box
+        objList, err := i.ByIndex("app", "busy-box")
+        if err != nil {
+                panic(err)
+        }
+
+        fmt.Println(objList[0].(*v1.Pod).Name)
+
+}
+
+// Output:
+// Add:  cloud-enterprise-7f84df95bc-7vwxb
+// Add:  busy-box-6698d6dff6-jmwfs
+// busy-box-6698d6dff6-jmwfs
+//
+```
+
+## NewShareInformer
+
+Share Informer 和 Informer 的主要区别就是可以添加多个 EventHandler
+
+```go
+// 只展示重要部分
+...
+func main() {
+        cliset := config.NewK8sConfig().InitClient()
+        listWarcher := cache.NewListWatchFromClient(
+                cliset.CoreV1().RESTClient(),
+                "configmaps",
+                "default",
+                fields.Everything(),
+        )
+        // 全量同步时间
+        shareInformer := cache.NewSharedInformer(listWarcher, &v1.ConfigMap{}, 0)
+        // 可以增加多个Event handler
+        shareInformer.AddEventHandler(&handlers.CmdHandler{})
+        shareInformer.AddEventHandler(&handlers.CmdHandler2{})
+        shareInformer.Run(wait.NeverStop)
+}
+```
+
+## NewShareIndexInformer
+
+`NewSharedIndexInformer` 和 `NewSharedInformer` 的区别就是可以添加 Indexer
+
+## NewSharedInformerFactoryWithOptions
+
+使用该方法可以创建一个 Informer 工厂对象，在该工厂对象启动前，我们可以向其中添加任意 Kubernetes 内置的资源以及任意 Indexer
+
+```go
+package main
+
+import (
+        "fmt"
+        "k8s-clientset/config"
+        "k8s-clientset/dc/handlers"
+        "k8s.io/apimachinery/pkg/labels"
+        "k8s.io/apimachinery/pkg/runtime/schema"
+        "k8s.io/apimachinery/pkg/util/wait"
+        "k8s.io/client-go/informers"
+)
+
+func main() {
+
+        cliset := config.NewK8sConfig().InitClient()
+        informerFactory := informers.NewSharedInformerFactoryWithOptions(
+                cliset,
+                0,
+                // 指定的namespace 空间，如果需要所有空间，则不指定该参数
+                informers.WithNamespace("default"),
+        )
+        // 添加 ConfigMap 资源
+        cmGVR := schema.GroupVersionResource{
+                Group:    "",
+                Version:  "v1",
+                Resource: "configmaps",
+        }
+        cmInformer, _ := informerFactory.ForResource(cmGVR)
+        // 增加对 ConfigMap 事件的处理
+        cmInformer.Informer().AddEventHandler(&handlers.CmdHandler{})
+
+        // 添加 Pod 资源
+        podGVR := schema.GroupVersionResource{
+                Group:    "",
+                Version:  "v1",
+                Resource: "pods",
+        }
+        _, _ = informerFactory.ForResource(podGVR)
+
+        // 启动 informerFactory
+        informerFactory.Start(wait.NeverStop)
+        // 等待所有资源完成本地同步
+        informerFactory.WaitForCacheSync(wait.NeverStop)
+        
+        // 打印资源信息
+        listConfigMap, _ := informerFactory.Core().V1().ConfigMaps().Lister().List(labels.Everything())
+        fmt.Println("Configmap:")
+        for _, obj := range listConfigMap {
+                fmt.Printf("%s/%s \n", obj.Namespace, obj.Name)
+        }
+        fmt.Println("Pod:")
+        listPod, _ := informerFactory.Core().V1().Pods().Lister().List(labels.Everything())
+        for _, obj := range listPod {
+                fmt.Printf("%s/%s \n", obj.Namespace, obj.Name)
+        }
+        select {}
+}
+
+// Ouput:
+
+// Configmap:
+// default/istio-ca-root-cert 
+// default/kube-root-ca.crt 
+// default/my-config 
+// Pod:
+// default/cloud-enterprise-7f84df95bc-csdqp 
+// default/busy-box-6698d6dff6-42trb 
+```
+
+如果想监听所有可操作的内部资源，可以使用 `DiscoveryClient` 去获取当前集群的资源版本再调用 `InformerFactory` 进行资源缓存

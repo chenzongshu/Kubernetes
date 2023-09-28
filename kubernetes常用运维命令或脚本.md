@@ -604,6 +604,16 @@ grafana                 ClusterIP   10.233.38.141   <none>        3000/TCP      
 kubectl port-forward --address 0.0.0.0 svc/grafana -n monitoring 3000:3000
 ```
 
+# 节点上Pod按CPU使用率排序
+
+prd为namespace关键字
+
+```bash
+kubectl get pod -A -owide |grep <node> |awk '{print $1,$2}' |grep "^prd" |while read a;do kubectl top pod -n $a |grep -v CPU |awk '{print $2,$3,$1}';done |sort -k 1 -n -r|head -n 10
+```
+
+
+
 # 删除Terminating的Namespaces
 
 以test举例
@@ -725,3 +735,14 @@ ps -o pid,psr,comm -p {pid}
 方法4：
 
 安装htop，执行，然后按F2，选择columns，在“available columns”下面添加PRCESSOR，然后按F10保存，第一列就多了一个CPU列出来
+
+# 根据PID找到Pod
+
+
+
+# 查找一个网段的Pod IP
+
+```bash
+kubectl get po -o wide -A|grep -E "10.129.18[0-3]"  //正则表达式
+```
+

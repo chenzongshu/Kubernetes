@@ -7,12 +7,12 @@ Event 是集群中某个事件的报告。它一般表示系统的某些状态�
 下面是个简单的例子，随便写了一个不存在的镜像，pod event报错
 
 ```bash
-kubectl -n moelove describe pods test-d9ddbdd84-tnrhd
+kubectl -n test describe pods test-d9ddbdd84-tnrhd
 ...
 Events:
   Type     Reason     Age                    From               Message
   ----     ------     ----                   ----               -------
-  Normal   Scheduled  4m                     default-scheduler  Successfully assigned moelove/non-exist-d9ddbdd84-tnrhd to kind-worker3
+  Normal   Scheduled  4m                     default-scheduler  Successfully assigned test/non-exist-d9ddbdd84-tnrhd to kind-worker3
   Normal   Pulling    2m22s (x4 over 3m59s)  kubelet            Pulling image "test::latest"
   Warning  Failed     2m21s (x4 over 3m59s)  kubelet            Failed to pull image "test::latest": rpc error: code = Unknown desc = failed to pull and unpack image "test:latest": failed to resolve reference "test::latest": failed to authorize: failed to fetch anonymous token: unexpected status: 403 Forbidden
   Warning  Failed     2m21s (x4 over 3m59s)  kubelet            Error: ErrImagePull
@@ -134,7 +134,6 @@ reportingComponent: default-scheduler
 reportingInstance: default-scheduler-kind-control-plane
 source: {}
 type: Normal
-
 ```
 
 - involvedObject： 触发event的资源类型
@@ -155,11 +154,11 @@ import {
     "k8s.io/client-go/kubernetes/scheme"
     "k8s.io/client-go/tools/record"
 
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartStructuredLogging(3)
-	eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: client.CoreV1().Events(pod.Namespace)})
-	r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "descheduler"})
-	r.Event(pod, v1.EventTypeNormal, "Descheduled", fmt.Sprintf("pod evicted by descheduler%s", "test reason for czs"))
+    eventBroadcaster := record.NewBroadcaster()
+    eventBroadcaster.StartStructuredLogging(3)
+    eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: client.CoreV1().Events(pod.Namespace)})
+    r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "descheduler"})
+    r.Event(pod, v1.EventTypeNormal, "Descheduled", fmt.Sprintf("pod evicted by descheduler%s", "test reason for czs"))
 }
 ```
 
@@ -182,5 +181,11 @@ import {
   - 第三个参数是Reason，字符串类型，含义在开头有说
   
   - 第四个参数是Message，字符串类型，含义在开头有说
+
+- 如果 apiserver 失联，会重试发送 12 次，第一次间隔是 [0,10)，剩余每次间隔 10s，合计110-120 s 左右如果还连不上 apiserver 就会放弃本次事件的发送；
+
+- client-go 在发送 event 之前会先进行一系列预处理流程，如果相似 event 的聚合，效果就是新发送一个关于相同资源对象的 Reason 和 Message 都相同的 event，这时候新 event 的 count 就是这类事件发生的次数，LastTimestamp 是事件产生时间，FirstTimestamp 是第一次观察到这类事件的时间；并且快速发送多个一样的 event 满足一定条件时会被聚合成一个；
+
+- 消息广播器的缓冲区大小是 1000，如果产生事件的速度太快，当 EventWatcher 来不及处理时，新产生的 event 也会被直接丢弃；
 
     

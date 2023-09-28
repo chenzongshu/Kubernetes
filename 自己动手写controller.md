@@ -72,8 +72,6 @@ spec:
 
 我们来定义一个管理自定义资源VM的控制器
 
-
-
 自己编写controller有三步：
 
 - 定义CRD
@@ -82,7 +80,6 @@ spec:
 
 - 编写Controller等代码
 
-  
 
 先建立如下目录
 

@@ -355,7 +355,59 @@ func getNodePods(client k8sClient.Interface, node v1.Node) (*v1.PodList, error) 
 	}
 ```
 
+## 选主
 
+client-go库提供了一个leaderelection包，可以帮助我们实现选主
+
+```go
+import (
+    "flag"
+    "fmt"
+    "os"
+
+    "k8s.io/client-go/tools/leaderelection"
+    "k8s.io/client-go/tools/leaderelection/resourcelock"
+)
+
+func main() {
+    // 创建一个标识符，通常是包含了pod名称和namespace的字符串
+    id, err := os.Hostname()
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "failed to get hostname: %v", err)
+        os.Exit(1)
+    }
+
+    // 创建一个选主配置
+    lec := leaderelection.LeaderElectionConfig{
+        Lock:          &resourcelock.EndpointsLock{EndpointsMeta: metav1.ObjectMeta{Name: "my-lock", Namespace: "default"}},
+        LeaseDuration: 15 * time.Second,
+        RenewDeadline: 10 * time.Second,
+        RetryPeriod:   2 * time.Second,
+        Callbacks: leaderelection.LeaderCallbacks{
+            OnStartedLeading: func(ctx context.Context) {
+                // 当我们开始领导时，我们开始管理我们的领导职责
+                run(ctx)
+            },
+            OnStoppedLeading: func() {
+                // 当我们停止领导时，我们可以做一些清理工作
+                fmt.Fprintf(os.Stderr, "we lost the election")
+                os.Exit(1)
+            },
+        },
+        WatchDog: lock.NewFake(),
+        Name:     id,
+    }
+
+    // 运行选主过程
+    leaderelection.RunOrDie(context.Background(), lec)
+}
+```
+
+先创建了一个选主配置，包括一个锁（用于防止多个节点同时成为领导者），租约持续时间，续约截止时间，重试周期，以及一些回调函数（当我们开始或停止领导时会被调用）。
+
+然后，我们调用`leaderelection.RunOrDie`函数来开始选主过程。
+
+这只是一个基本的示例，实际使用时可能需要根据具体情况进行调整
 
 # Informer
 
@@ -496,6 +548,59 @@ func main() {
 ## NewShareIndexInformer
 
 `NewSharedIndexInformer` 和 `NewSharedInformer` 的区别就是可以添加 Indexer
+
+## NewSharedInformerFactory
+
+使用 `SharedInformerFactory` 的好处是，它可以为多个 Informer 提供共享的缓存和连接。这意味着，如果你有多个 Informer 都需要监听同一种资源，你只需要，如果你有多个 Informer 都需要监听同一种资源，你只需要创建一个 Informer，然后让其他的 Informer 共享它的缓存和连接。这样可以大大减少对 API 服务器的负载，提高应用的性能。
+
+- 首先，你需要创建一个 Kubernetes 客户端。这通常通过 `client-go` 的 `kubernetes.NewForConfig` 函数完成：
+
+```go
+config, err := rest.InClusterConfig()
+if err != nil {
+    log.Fatal(err)
+}
+clientset, err := kubernetes.NewForConfig(config)
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+- 然后，你可以使用 `clientset` 创建一个 `SharedInformerFactory`：
+
+```go
+factory := informers.NewSharedInformerFactory(clientset, 0)
+```
+
+- 使用 `SharedInformerFactory` 创建 Informer。例如，如果你想创建一个 Pod Informer，你可以这样做：
+
+```go
+podInformer := factory.Core().V1().Pods().Informer()
+```
+
+- 注册事件处理器。你可以为 Informer 注册添加、更新和删除事件的处理器：
+
+```go
+podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+    AddFunc: func(obj interface{}) {
+        // 处理添加事件
+    },
+    UpdateFunc: func(oldObj, newObj interface{}) {
+        // 处理更新事件
+    },
+    DeleteFunc: func(obj interface{}) {
+        // 处理删除事件
+    },
+})
+```
+
+- 启动 Informer。你需要在一个单独的 goroutine 中启动 Informer：
+
+```go
+go podInformer.Run(stopCh)
+```
+
+其中，`stopCh` 是一个 `chan struct{}` 类型的的通道，用于停止 Informer。当你想停止 Informer 时，你可以关闭这个通道。
 
 ## NewSharedInformerFactoryWithOptions
 

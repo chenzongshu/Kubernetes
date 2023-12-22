@@ -162,7 +162,7 @@ Kong: https://bit.ly/k4k8s-get-started
 
 ```
 [hll_root@ALY-01 ~]$ echo $PROXY_IP
-119.23.250.137:80
+xxx.xxx.xxx.xxx:80
 ```
 
 在安装完成但是没有任何Ingress规格和服务情况下，使用该方式访问，会得到默认的404

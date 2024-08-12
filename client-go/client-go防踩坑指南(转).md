@@ -122,3 +122,49 @@ kubernetes 中controlle-manager中的cnotroller默认是： 12h~24h的一个随�
 在Informer EventHandler 中OnDelete 被调用的时候， 需要判断 DeletedFinalStateUnknown 状态， 典型的使用场景如下： ![Text  Description automatically generated](https://img2023.cnblogs.com/blog/1111516/202211/1111516-20221130171706610-470392248.png)
 
 DeletedFinalStateUnknown 一般出现在由于网络中断等原因导致informer 本地cache 和apiserver 不一致， 等informer relist的时候发现informer cache中存在这个Object, 但是apiserver 没有， 就会触发一个DeletedFinalStateUnknown。 使用者需要显式的转换会原来的对象。
+
+
+
+### **优先使用informer访问本地缓存数据**
+
+优先使用client-go的[informer](https://pkg.go.dev/k8s.io/client-go/informers)获取资源，通过本地缓存（Cache）查询数据，避免List请求直接访问API Server，以减少API Server的负载压力。
+
+### **优化通过API Server获取资源的方式**
+
+对于未访问过的本地缓存，仍需直接通过API Server获取资源。但可以遵循以下建议。
+
+- 在List请求中设置`resourceVersion=0`。
+
+  `resourceVersion`表示资源状态的版本。设置为`0`时，请求会获取 API Server的缓存数据，而非直接访问etcd，减少API Server与etcd之间的内部交互次数，更快地响应客户端List请求。示例如下。
+
+   
+
+  ```shell
+  k8sClient.CoreV1().Pods("").List(metav1.ListOptions{ResourceVersion: "0"})
+  ```
+
+- 避免全量List资源，防止数据检索量过大。
+
+  为了减少请求返回的数据量，应使用过滤条件（Filter）来限定List请求的范围，例如lable-selector（基于资源标签筛选）或field-selector（基于资源字段筛选）。
+
+  **说明**
+
+  etcd是一个键值（KV）存储系统，本身不具备按label或field过滤数据的功能，请求带有的过滤条件实际由API Server处理。因此，当使用Filter功能时，建议同时将List请求的`resourceVersion`设置为`0`。请求数据将从API Server的缓存中获取，而不会直接访问etcd，减少对etcd的压力。
+
+- 使用Protobuf（而非JSON）访问非CRD资源。
+
+  API Server可以以不同的数据格式向客户端返回资源对象，包括JSON和Protobuf。默认情况下，当客户端请求Kubernetes API时，Kubernetes返回序列化为JSON的对象，其内容类型（Content-Type）为`application/json`。 客户端可以指定请求使用Protobuf格式的数据，Protobuf在内存使用和网络传输流量方面相较JSON更有优势。
+
+  但并非所有API资源类型都支持Protobuf。发送请求时，可以在`Accept`请求头中指定多种内容类型（例如 `application/json`、`application/vnd.kubernetes.protobuf`），从而支持在无法使用Protobuf时回退到默认的JSON格式。更多信息，请参见[Alternate representations of resources](https://kubernetes.io/docs/reference/using-api/api-concepts/#alternate-representations-of-resources) 。示例如下。
+
+   
+
+  ```shell
+  Accept: application/vnd.kubernetes.protobuf, application/json
+  ```
+
+### **使用中心化控制器**
+
+避免在每个节点上都创建独立的控制器用于Watch集群的全量数据。在这种情况下，控制器启动时，将几乎同时向API Server发送大量的List请求以同步当前的集群状态，对控制面造成巨大压力，继而导致服务不稳定或崩溃。
+
+为了避免此问题，建议采用中心化的控制器设计，为整个集群创建一个或一组集中管理的控制器实例，运行在单个节点或少数几个节点上。中心化的控制器会负责监听和处理所需的集群数据，仅启动一次（或少数几次）List请求，并仅维护必要数量的Watch连接，大大减少了对API Server的压力。

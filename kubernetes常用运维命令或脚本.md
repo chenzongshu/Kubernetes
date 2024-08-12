@@ -576,6 +576,18 @@ kubectl get pods -A -o=custom-columns='DATA:metadata.*'
 
 有关更多示例，请参看 kubectl [参考文档](https://kubernetes.io/zh/docs/reference/kubectl/overview/#custom-columns)。
 
+## 列出所有Pod的Request/Limit
+
+```go
+## deployment
+kubectl get deploy -n pre-php --output=custom-columns="NAME:.metadata.name,NUMS:.spec.replicas,CPU:.spec.template.spec.containers[*].resources.limits.cpu,MEM:.spec.template.spec.containers[*].resources.limits.memory"
+
+## pod
+kubectl get po -n pre-msa --output=custom-columns="NAME:.metadata.name,CPU:.spec.containers[*].resources.requests.cpu,MEM:.spec.containers[*].resources.requests.memory"
+```
+
+
+
 ## Kubectl 日志输出详细程度和调试
 
 Kubectl 日志输出详细程度是通过 `-v` 或者 `--v` 来控制的，参数后跟一个数字表示日志的级别。 Kubernetes 通用的日志习惯和相关的日志级别在 [这里](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md) 有相应的描述。
@@ -684,6 +696,18 @@ done
 openssl x509 -in /etc/kubernetes/ssl/ca.pem -text -noout
 ```
 
+# 查看kubeconfig过期时间
+
+```
+grep client-certificate-data {config} |awk '{print $2}' |base64 -d | openssl x509 -noout -enddate
+```
+
+# 节点基于多个标签选择
+
+```
+kubectl get nodes -l 'hll.zone in (zone-2),nodeSpec notin (32c)'
+```
+
 # 自定义输出列
 
 ```bash
@@ -744,5 +768,21 @@ ps -o pid,psr,comm -p {pid}
 
 ```bash
 kubectl get po -o wide -A|grep -E "10.129.18[0-3]"  //正则表达式
+```
+
+
+
+# 查找绑定了某个Pod的SA
+
+```
+kubectl get clusterrolebinding -o json | jq -r '.items[] | select(.subjects[]? | .kind=="ServiceAccount" and .name=="default") | .metadata.name'
+```
+
+
+
+# 查找不正常的Pod
+
+```
+kubectl get pod -A | grep -iv completed | awk -F"[ /]+" 'BEGIN{found=0} !/NAME/ {if (($3!=$4)||($5!="Running")) { found=1; print $0}} END { if (!found) print "All pods are ready"}'
 ```
 

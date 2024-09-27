@@ -85,10 +85,10 @@ kubectl delete po `kubectl get po|grep consul|awk '{print $1}'|xargs|sed 's/\n/,
 kubectl delete po `kubectl get po|grep consul|awk 'NR == 1 {next} {print $1}'|xargs|sed 's/\n/,/g'`
 ```
 
-# 清理非 Running 的 pod
+# 清理状态为 **ContainerStatusUnknown Error ImagePullBackOff**状态的pod
 
 ```
-kubectl get pod -o wide --all-namespaces | awk '{if($4!="Running"){cmd="kubectl -n "$1" delete pod "$2; system(cmd)}}'
+kubectl get pod -o wide --all-namespaces | awk '{if($4~"ContainerStatusUnknown|Error|ImagePullBackOff"){cmd="kubectl -n "$1" delete pod "$2; system(cmd)}}'
 ```
 
 # 进入容器 netns

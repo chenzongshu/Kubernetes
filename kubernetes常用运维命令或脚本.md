@@ -48,6 +48,14 @@ for image in $(docker images --format '{{.Repository}}:{{.Tag}}'); do
 done
 ```
 
+# Containerd手动拉镜像
+
+```shell
+ctr -n k8s.io images pull xxxx-registry.cn-hangzhou.cr.aliyuncs.com/xxx/grpc:latest --user "账号@1xxxx :密码"
+```
+
+
+
 # 日志查询
 
 ```bash
@@ -718,8 +726,11 @@ kubectl get deploy test -n test --output=custom-columns="NAME:.metadata.name,NUM
 
 ```bash
 1 可以先执行kubectl get pods $PodName -n $NameSpace -o wide看看pod运行的节点
-2 登录到对应的node上，执行 docker ps|grep $pod名称找到容器ID，然后在执行 docker inspect -f {{.State.Pid}} 容器id 找到容器的进程pid
-3 执行yum -y install util-linux.x86_64 安装下 nsenter工具，然后执行 nsenter --target 容器pid -n 之后进入到容器的网络名称空间，tcpdump -i eth0 host ip地址 and port 端口 -s 0 -C 40 -W 50 -w //tmp/1.pcap
+2 登录到对应的node上，执行 docker ps|grep $pod名称找到容器ID，然后在执行 docker inspect -f {{.State.Pid}} 容器id 找到容器的进程pid; 
+  如果是containerd， yum -y install jq ; crictl inspect $(crictl ps | grep `crictl pods | grep $POD_NAME名称 | awk '{print$1}'` | awk '{print$1}') | jq .info.pid ,找到容器的进程pid
+3 执行yum -y install util-linux.x86_64 安装下 nsenter工具，然后执行 nsenter --target 容器pid -n 之后进入到容器的网络名称空间，
+tcpdump -i eth0 host ip地址 and port 端口 -s 0 -C 40 -W 50 -w /tmp/1.pcap
+或者 tcpdump -i eth0 -s 0 -w /tmp/1.pcap抓包
 ```
 
 # 查看Pod 宿主机CPU绑核
